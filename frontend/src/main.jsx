@@ -10,8 +10,9 @@ import Features from './pages/Features.jsx';
 import About from './pages/About.jsx';
 import HF2 from './Layout/HF2.jsx';
 import Homepage2 from './pages/User.jsx';
-import ChatPage from './pages/Chatpage.jsx';
 import Profile from './pages/Profile.jsx';
+import { HF3 } from './Layout/HF3.jsx';
+import ChatPage from './pages/Chatpage.jsx';
 
 const route = createBrowserRouter([
   {
@@ -49,12 +50,19 @@ const route = createBrowserRouter([
         element:<Homepage2/>
       },
       {
-        path:'/user/chat',
-        element:<ChatPage/>
-      },
-      {
         path:'/user/profile',
         element:<Profile/>
+      }
+      
+    ]
+  },
+  {
+    path:'/user/chat',
+    element:<HF3/>,
+    children:[
+      {
+        index:true,
+        element:<ChatPage/>
       }
     ]
   }

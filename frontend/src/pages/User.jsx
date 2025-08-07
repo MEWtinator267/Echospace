@@ -3,11 +3,11 @@ import { useNavigate } from "react-router-dom";
 
 // Just hardcode a path or use a public image link for now
 const dashboardBg =
-  "https://res.cloudinary.com/djjq6nbcn/image/upload/v1753623654/samples/cup-on-a-table.jpg";
+  "https://res.cloudinary.com/djjq6nbcn/image/upload/v1753623654/samples/cup-on-a-table.jpg"; 
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const username = localStorage.getItem("loggedInUser") || "User";
+  const username = JSON.parse(localStorage.getItem("user"))?.name || "User";
   const [showSearch, setShowSearch] = useState(false);
   const [searchValue, setSearchValue] = useState("");
 
@@ -28,7 +28,7 @@ const Dashboard = () => {
     <div className="relative min-h-screen overflow-hidden">
       {/* Background Layer */}
       <div
-        className="absolute inset-0 z-0 animate-scroll-background bg-base-200/60"
+        className="absolute inset-0 z-0 blur-md animate-scroll-background bg-base-200/60"
         style={{
           backgroundImage: `url('${dashboardBg}')`,
           backgroundRepeat: "repeat-y",
@@ -46,10 +46,14 @@ const Dashboard = () => {
               <div className="avatar mb-4">
                 <div className="w-28 h-28 rounded-full ring ring-primary ring-offset-base-100 ring-offset-2">
                   <img
-                    src="https://placehold.co/200x200?text=App+Logo"
-                    alt="App Logo"
-                    className="w-full h-full object-cover"
+                  src={
+                  JSON.parse(localStorage.getItem("user"))?.profilePic ||
+                  "https://placehold.co/100x100?text=User"
+                  }
+                  alt="Profile"
+                  className="w-10 h-10 rounded-full object-cover"
                   />
+
                 </div>
               </div>
               <h1 className="text-5xl font-bold">Welcome, {username}!</h1>
