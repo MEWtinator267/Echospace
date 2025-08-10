@@ -4,14 +4,14 @@ import ThemeContext from "../components/ThemeContext";
 import { toast } from "react-toastify";
 
 const dashboardBg =
-  "https://res.cloudinary.com/djjq6nbcn/image/upload/v1753623654/samples/cup-on-a-table.jpg";
+  "https://res.cloudinary.com/dpki2sd5o/image/upload/v1754573098/joe-woods-4Zaq5xY5M_c-unsplash_wcuzb5.jpg";
 
 const Profile = () => {
   const navigate = useNavigate();
 
   const [user, setUser] = useState(JSON.parse(localStorage.getItem("user")) || {});
   const username = user?.name || "User";
-  const userId = user?._id || "Unavailable";
+  const userId = user?.id || "Unavailable";
   const [showPrivateInfo, setShowPrivateInfo] = useState(false);
 
   const copyToClipboard = () => {

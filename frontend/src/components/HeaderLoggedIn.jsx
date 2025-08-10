@@ -1,36 +1,88 @@
-import React, { useContext } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import ThemeContext from './ThemeContext';
 import { useNavigate, Link } from 'react-router-dom';
+import axios from 'axios';
 
 function HeaderLoggedIn() {
   const { theme, toggleTheme } = useContext(ThemeContext);
   const navigate = useNavigate();
+  const [notifications, setNotifications] = useState([]);
+  const [friends, setFriends] = useState([]); // ✅ track friends instantly
+  const loggedInUser = JSON.parse(localStorage.getItem("user"));
 
-  const handleLogoClick = () => {
-    navigate('/user/home');
+  const fetchNotifications = async () => {
+    try {
+      const { data } = await axios.get(`/api/notifications`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      setNotifications(data.notifications || []);
+    } catch (err) {
+      console.error("Error fetching notifications", err);
+      alert("Failed to fetch notifications. Please try again later.");
+    }
+  };
+
+  const acceptFriendRequest = async (notificationId, requesterId) => {
+    try {
+      const { data } = await axios.post(
+        `/api/friends/accept`,
+        { requesterId },
+        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+      );
+
+      // ✅ Remove notification from list
+      setNotifications(prev => prev.filter(n => n._id !== notificationId));
+
+      // ✅ Add new friend to local state instantly
+      if (data.friend) {
+        setFriends(prev => [...prev, data.friend]);
+      }
+
+      alert("Friend request accepted!");
+    } catch (err) {
+      console.error("Error accepting friend request", err);
+      alert("Failed to accept friend request.");
+    }
+  };
+
+  const rejectFriendRequest = async (notificationId, senderId) => {
+    try {
+      await axios.post(
+        `/api/friends/reject`,
+        { senderId },
+        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+      );
+
+      // ✅ Remove notification instantly
+      setNotifications(prev => prev.filter(n => n._id !== notificationId));
+
+      alert("Friend request rejected.");
+    } catch (err) {
+      console.error("Error rejecting friend request", err);
+      alert("Failed to reject friend request.");
+    }
   };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
-    localStorage.removeItem('loggedInUser');
+    localStorage.removeItem('user');
     navigate('/login');
   };
+
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
 
   return (
     <div className="w-full">
       <nav>
         <div className="navbar bg-base-100 shadow-sm h-20 px-4">
-          {/* Left: Logo */}
           <div className="navbar-start min-w-[220px]">
-            <a className="text-xl font-bold cursor-pointer" onClick={handleLogoClick}>
+            <a className="text-xl font-bold cursor-pointer" onClick={() => navigate('/user')}>
               EchoSpace
             </a>
           </div>
 
-          {/* Center: (No Links) */}
-          <div className="navbar-center hidden lg:flex" />
-
-          {/* Right Section */}
           <div className="navbar-end flex items-center gap-4 pr-4">
             {/* Notification Dropdown */}
             <div className="dropdown dropdown-end">
@@ -50,17 +102,44 @@ function HeaderLoggedIn() {
                       d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
                     />
                   </svg>
-                  <span className="badge badge-xs badge-error indicator-item"></span>
+                  {notifications.length > 0 && (
+                    <span className="badge badge-xs badge-error indicator-item" />
+                  )}
                 </div>
               </div>
+
               <ul
                 tabIndex={0}
-                className="dropdown-content menu p-4 shadow bg-base-100 rounded-box w-72 mt-3 z-[1] space-y-2"
+                className="dropdown-content menu p-4 shadow bg-base-100 rounded-box w-80 mt-3 z-[1] space-y-2"
               >
                 <li className="font-semibold text-base-content">Notifications</li>
-                <li><span className="text-sm">🔔 You have 2 new messages</span></li>
-                <li><span className="text-sm">👥 New friend request</span></li>
-                <li><span className="text-sm text-primary cursor-pointer hover:underline">View all</span></li>
+
+                {notifications.length === 0 ? (
+                  <li><span className="text-sm">🎉 No new notifications</span></li>
+                ) : (
+                  notifications.map((notif) => (
+                    <li
+                      key={notif._id}
+                      className="text-sm border p-2 rounded space-y-2"
+                    >
+                      <div>👤 <strong>{notif.senderName}</strong> sent a friend request</div>
+                      <div className="flex gap-2">
+                        <button
+                          className="btn btn-xs btn-primary"
+                          onClick={() => acceptFriendRequest(notif._id, notif.senderId)}
+                        >
+                          Accept
+                        </button>
+                        <button
+                          className="btn btn-xs btn-error text-white"
+                          onClick={() => rejectFriendRequest(notif._id, notif.senderId)}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </li>
+                  ))
+                )}
               </ul>
             </div>
 
@@ -68,16 +147,16 @@ function HeaderLoggedIn() {
             <div className="dropdown dropdown-end">
               <label tabIndex={0} className="btn btn-circle avatar">
                 <div className="w-10 rounded-full">
-                  <img src="/assets/default-avatar.png" alt="Profile" />
+                  <img src={loggedInUser?.profilePic || "https://placehold.co/100x100?text=User"} alt="Profile" />
                 </div>
               </label>
               <ul
                 tabIndex={0}
                 className="dropdown-content p-4 shadow bg-base-100 rounded-box w-56 z-10 space-y-3"
               >
-                {/* Theme Toggle */}
                 <li className="flex justify-center">
                   <label className="flex items-center gap-2 cursor-pointer" htmlFor="theme-toggle">
+                    {/* Light/Dark toggle */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"
                       viewBox="0 0 24 24" fill="none" stroke="currentColor"
                       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -98,30 +177,9 @@ function HeaderLoggedIn() {
                     </svg>
                   </label>
                 </li>
-
-                {/* Profile */}
-                <li>
-                  <Link to="/user/profile" className="btn btn-outline btn-sm w-full">
-                    Profile
-                  </Link>
-                </li>
-
-                {/* Dashboard Button */}
-                <li>
-                  <Link to="/user" className="btn btn-primary btn-sm w-full">
-                    Dashboard
-                  </Link>
-                </li>
-
-                {/* Logout */}
-                <li>
-                  <button
-                    onClick={handleLogout}
-                    className="btn btn-error btn-sm w-full text-white"
-                  >
-                    Logout
-                  </button>
-                </li>
+                <li><Link to="/user/profile" className="btn btn-outline btn-sm w-full">Profile</Link></li>
+                <li><Link to="/user" className="btn btn-primary btn-sm w-full">Dashboard</Link></li>
+                <li><button onClick={handleLogout} className="btn btn-error btn-sm w-full text-white">Logout</button></li>
               </ul>
             </div>
           </div>

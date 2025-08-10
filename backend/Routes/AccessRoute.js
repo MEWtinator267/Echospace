@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { loginvalidation, signupvalidation } from '../Middleware/Validation.js';
-import { login, signup, uploadAvatar } from '../Components/AccessLogic.js';
+import { login, signup, uploadAvatar } from '../Controllers/AccessLogic.js';
 import upload from '../Middleware/multer.js';
 import { protect } from '../Middleware/auth.js';
 

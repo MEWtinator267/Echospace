@@ -67,7 +67,7 @@ try {
       <div
         className="absolute inset-0 z-0 animate-scroll-background bg-base-200/60"
         style={{
-          backgroundImage: `url('https://res.cloudinary.com/djjq6nbcn/image/upload/v1753623654/samples/cup-on-a-table.jpg')`,
+          backgroundImage: `url('https://res.cloudinary.com/dpki2sd5o/image/upload/v1754573098/joe-woods-4Zaq5xY5M_c-unsplash_wcuzb5.jpg')`,
           backgroundRepeat: 'repeat-y',
           backgroundSize: '100% auto',
           backgroundPosition: '0 0',

@@ -36,6 +36,10 @@ const userSchema = new mongoose.Schema(
       select: false, // don't return on queries unless explicitly asked
     },
 
+    // ✅ Friend system
+    friends: [{ type: mongoose.Schema.Types.ObjectId, ref: "AllUser" }],
+    friendRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: "AllUser" }],
+
     // Meta
     joinedOn: {
       type: Date,
@@ -47,6 +51,7 @@ const userSchema = new mongoose.Schema(
   }
 );
 
+// 👇 "AllUser" is your current model name
 const User = mongoose.model("AllUser", userSchema);
 
 export default User;
