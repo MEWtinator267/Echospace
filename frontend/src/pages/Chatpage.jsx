@@ -1,192 +1,390 @@
+// ChatPage.jsx
 import React, { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import io from "socket.io-client";
+import {
+  Send,
+  Paperclip,
+  Smile,
+  MoreVertical,
+  Phone,
+  Video,
+  Info,
+} from "lucide-react";
+import { useUser } from "../Utils/UserContext.jsx";
 
-const ENDPOINT = "http://localhost:5000"; // Update if deployed
+const ENDPOINT = "http://localhost:8000";
 let socket;
 let selectedChatCompare;
 
-const ChatPage = () => {
-  const [user, setUser] = useState(JSON.parse(localStorage.getItem("user")));
+export default function ChatPage() {
+  const { user } = useUser();
+
   const [chats, setChats] = useState([]);
+  const [friends, setFriends] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
-  const [socketConnected, setSocketConnected] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [otherTyping, setOtherTyping] = useState(false);
+
   const messagesEndRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
 
-  const config = {
-    headers: {
-      Authorization: `Bearer ${user?.token}`,
-    },
-  };
+  const formatTime = (iso) =>
+    iso
+      ? new Date(iso).toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        })
+      : "";
 
-  // Setup socket
+  const otherUserFromChat = (chat) =>
+    chat?.users?.find((u) => u._id !== user?._id) || null;
+
+  const mapServerMsgToUI = (m) => ({
+    id: m._id || Date.now().toString(),
+    content: m.content || m.text || "",
+    timestamp: m.createdAt ? formatTime(m.createdAt) : formatTime(new Date()),
+    isOwn:
+      (m?.sender && (m.sender._id === user?._id || m.sender === user?._id)) ||
+      false,
+    status: m?.sender?._id === user?._id ? "sent" : "read",
+    raw: m,
+  });
+
+  // ---------- Socket ----------
   useEffect(() => {
-    socket = io(ENDPOINT);
-    if (user) {
-      socket.emit("setup", user);
-      socket.on("connected", () => setSocketConnected(true));
-    }
+    if (!user) return;
 
-    return () => socket.disconnect();
-  }, [user]);
+    socket = io(ENDPOINT, { withCredentials: true });
 
-  // Fetch chats
-  useEffect(() => {
-    const fetchChats = async () => {
-      try {
-        const { data } = await axios.get(`${ENDPOINT}/api/chat`, config);
-        setChats(data);
-      } catch (error) {
-        console.error("Failed to fetch chats:", error);
+    socket.emit("setup", user);
+
+    socket.on("connect", () => console.log("Socket connected:", socket.id));
+    socket.on("disconnect", () => console.log("Socket disconnected"));
+
+    const onMessageReceived = (newMsgReceived) => {
+      // ✅ only add if it's for the active chat
+      if (
+        !selectedChatCompare ||
+        selectedChatCompare._id !== newMsgReceived.chat._id
+      ) {
+        return;
       }
+      setMessages((prev) => [...prev, mapServerMsgToUI(newMsgReceived)]);
     };
 
-    fetchChats();
-  }, []);
+    const onTyping = (chatId) => {
+      if (selectedChat && selectedChat._id === chatId) setOtherTyping(true);
+    };
+    const onStopTyping = (chatId) => {
+      if (selectedChat && selectedChat._id === chatId) setOtherTyping(false);
+    };
 
-  // Fetch messages when chat selected
+    socket.on("message received", onMessageReceived);
+    socket.on("typing", onTyping);
+    socket.on("stop typing", onStopTyping);
+
+    return () => {
+      socket.off("message received", onMessageReceived);
+      socket.off("typing", onTyping);
+      socket.off("stop typing", onStopTyping);
+      socket.disconnect();
+    };
+  }, [user?._id]);
+
+  // ---------- Load chats ----------
   useEffect(() => {
-    const fetchMessages = async () => {
-      if (!selectedChat) return;
+    if (!user?.token) return;
+    axios
+      .get(`${ENDPOINT}/api/chat`, {
+        headers: { Authorization: `Bearer ${user.token}` },
+      })
+      .then(({ data }) => setChats(Array.isArray(data) ? data : []))
+      .catch((err) => {
+        console.error("fetch chats error:", err?.response?.data || err.message);
+        setChats([]);
+      });
+  }, [user?.token]);
 
+  // ---------- Load friends ----------
+  useEffect(() => {
+    if (!user?.token) return;
+    axios
+      .get(`${ENDPOINT}/api/friends/list`, {
+        headers: { Authorization: `Bearer ${user.token}` },
+      })
+      .then(({ data }) => {
+        if (Array.isArray(data?.friends)) setFriends(data.friends);
+        else setFriends([]);
+      })
+      .catch((err) => {
+        console.error("fetch friends error:", err?.response?.data || err.message);
+        setFriends([]);
+      });
+  }, [user?.token]);
+
+  // ---------- Load messages ----------
+  useEffect(() => {
+    if (!selectedChat || !user?.token) {
+      setMessages([]);
+      selectedChatCompare = null;
+      return;
+    }
+
+    const fetchMessages = async () => {
       try {
-        const { data } = await axios.get(`${ENDPOINT}/api/message/${selectedChat._id}`, config);
-        setMessages(data);
+        const { data } = await axios.get(
+          `${ENDPOINT}/api/message/${selectedChat._id}`,
+          { headers: { Authorization: `Bearer ${user.token}` } }
+        );
+        const uiMsgs = Array.isArray(data) ? data.map(mapServerMsgToUI) : [];
+        setMessages(uiMsgs);
+
+        // ✅ join chat room
         socket.emit("join chat", selectedChat._id);
         selectedChatCompare = selectedChat;
       } catch (err) {
-        console.error("Error fetching messages:", err);
+        console.error("fetch messages error:", err?.response?.data || err.message);
+        setMessages([]);
       }
     };
 
     fetchMessages();
-  }, [selectedChat]);
+  }, [selectedChat, user?.token]);
 
-  // Scroll to bottom
+  // ---------- Auto scroll ----------
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Receive message
-  useEffect(() => {
-    socket.on("message received", (newMsgReceived) => {
-      if (
-        !selectedChatCompare || // if chat not selected
-        selectedChatCompare._id !== newMsgReceived.chat._id
-      ) {
-        // Optional: show notification
-      } else {
-        setMessages((prev) => [...prev, newMsgReceived]);
-      }
-    });
-  });
-
-  // Send message
-  const sendMessage = async () => {
-    if (!newMessage.trim()) return;
+  // ---------- Access chat ----------
+  const accessChat = async (friendId) => {
+    if (!user?.token) return;
 
     try {
       const { data } = await axios.post(
-        `${ENDPOINT}/api/message`,
-        {
-          content: newMessage,
-          chatId: selectedChat._id,
-        },
-        config
+        `${ENDPOINT}/api/chat`,
+        { userId: friendId },
+        { headers: { Authorization: `Bearer ${user.token}` } }
       );
 
-      socket.emit("new message", data);
-      setMessages([...messages, data]);
-      setNewMessage("");
-    } catch (error) {
-      console.error("Failed to send message:", error);
+      setSelectedChat(data);
+
+      if (socket && data?._id) {
+        socket.emit("join chat", data._id);
+      }
+
+      setChats((prev) => {
+        const exists = prev.find((c) => c._id === data._id);
+        if (exists) {
+          return [exists, ...prev.filter((c) => c._id !== data._id)];
+        }
+        return [data, ...prev];
+      });
+    } catch (err) {
+      console.error("accessChat error:", err?.response?.data || err.message);
     }
   };
 
-  useEffect(() => {
-  if (!socket) return;
+  // ---------- Typing ----------
+  const emitTyping = () => {
+    if (!selectedChat) return;
+    socket.emit("typing", selectedChat._id);
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      socket.emit("stop typing", selectedChat._id);
+    }, 1500);
+  };
 
-  socket.on("message received", (newMessage) => {
-    // If the new message is for the selected chat
-    if (!selectedChat || selectedChat._id !== newMessage.chat._id) {
-      // Optional: show notification or something
-      return;
-    } else {
-      setMessages((prev) => [...prev, newMessage]);
+  // ---------- Send message ----------
+  const sendMessage = async () => {
+    if (!newMessage.trim() || !selectedChat || sending || !user?.token) return;
+    try {
+      setSending(true);
+      const { data } = await axios.post(
+        `${ENDPOINT}/api/message`,
+        { content: newMessage.trim(), chatId: selectedChat._id },
+        { headers: { Authorization: `Bearer ${user.token}` } }
+      );
+
+      setMessages((prev) => [...prev, mapServerMsgToUI(data)]);
+
+      // ✅ emit new message to socket
+      socket.emit("new message", data);
+
+      setNewMessage("");
+    } catch (err) {
+      console.error("sendMessage error:", err?.response?.data || err.message);
+    } finally {
+      setSending(false);
     }
-  });
-});
+  };
 
+  if (!user)
+    return (
+      <div className="h-[92vh] flex items-center justify-center text-gray-500">
+        Please log in to view chats.
+      </div>
+    );
+
+  const other = selectedChat ? otherUserFromChat(selectedChat) : null;
 
   return (
-    <div className="flex h-[92vh]">
+    <div className="flex h-screen w-screen bg-base-200 overflow-hidden">
       {/* Sidebar */}
-      <div className="w-1/3 bg-base-200 overflow-y-auto">
-        <h2 className="text-xl font-bold p-4">Chats</h2>
-        <ul>
-          {chats.map((chat) => (
-            <li
-              key={chat._id}
-              className={`p-4 cursor-pointer hover:bg-base-300 ${
-                selectedChat?._id === chat._id ? "bg-base-300" : ""
-              }`}
-              onClick={() => setSelectedChat(chat)}
-            >
-              <div className="font-semibold">
-                {chat.isGroupChat
-                  ? chat.chatName
-                  : chat.users.find((u) => u._id !== user._id)?.name}
+      <div className="w-80 bg-base-100 border-r flex flex-col">
+        {/* Header */}
+        <div className="p-4 border-b bg-base-100 sticky top-0 z-10">
+          <h3 className="text-lg font-bold">Chats</h3>
+        </div>
+
+        {/* Friends list */}
+        <div className="flex-1 overflow-y-auto p-2">
+          {friends.length > 0 ? (
+            friends.map((f) => (
+              <div
+                key={f._id}
+                onClick={() => accessChat(f._id)}
+                className={`p-2 cursor-pointer hover:bg-base-200 rounded flex items-center gap-2 ${
+                  selectedChat &&
+                  !selectedChat.isGroupChat &&
+                  otherUserFromChat(selectedChat)?._id === f._id
+                    ? "bg-base-300"
+                    : ""
+                }`}
+              >
+                <img
+                  src={f.profilePic || "/default-avatar.png"} // ✅ fixed placeholder issue
+                  alt={f.name}
+                  className="w-8 h-8 rounded-full"
+                />
+                <span>{f.name}</span>
               </div>
-            </li>
-          ))}
-        </ul>
+            ))
+          ) : (
+            <div className="text-sm text-gray-500">No friends found</div>
+          )}
+        </div>
       </div>
 
-      {/* Chat Window */}
-      <div className="w-2/3 flex flex-col">
-        {/* Chat Header */}
-        <div className="bg-base-300 p-4 font-bold">
-          {selectedChat
-            ? selectedChat.isGroupChat
-              ? selectedChat.chatName
-              : selectedChat.users.find((u) => u._id !== user._id)?.name
-            : "Select a chat"}
+      {/* Chat Area */}
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <div className="p-4 border-b flex items-center justify-between bg-base-100">
+          <div className="flex items-center gap-3">
+            <div className="avatar">
+              <div className="w-10 rounded-full">
+                <img
+                  src={other?.profilePic || "/default-avatar.png"} // ✅ fixed placeholder issue
+                  alt="avatar"
+                />
+              </div>
+            </div>
+            <div>
+              <div className="font-semibold">
+                {selectedChat
+                  ? selectedChat.isGroupChat
+                    ? selectedChat.chatName
+                    : other?.name || "Unknown"
+                  : "Select a conversation"}
+              </div>
+              <div className="text-xs text-gray-500">
+                {otherTyping ? "Typing..." : "Online"}
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button className="btn btn-ghost btn-sm">
+              <Phone size={18} />
+            </button>
+            <button className="btn btn-ghost btn-sm">
+              <Video size={18} />
+            </button>
+            <button className="btn btn-ghost btn-sm">
+              <Info size={18} />
+            </button>
+            <button className="btn btn-ghost btn-sm">
+              <MoreVertical size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {messages.map((msg) => (
-            <div
-              key={msg._id}
-              className={`chat ${
-                msg.sender._id === user._id ? "chat-end" : "chat-start"
-              }`}
-            >
-              <div className="chat-bubble">{msg.content}</div>
+        <div className="flex-1 overflow-y-auto p-4 bg-base-200 pb-28">
+          {selectedChat ? (
+            messages.length > 0 ? (
+              messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`chat ${msg.isOwn ? "chat-end" : "chat-start"}`}
+                >
+                  <div
+                    className={`chat-bubble ${
+                      msg.isOwn ? "chat-bubble-primary" : "chat-bubble-secondary"
+                    }`}
+                  >
+                    {msg.content}
+                    <div className="text-[10px] opacity-70 mt-1">
+                      {msg.timestamp}
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center text-gray-500">No messages yet</div>
+            )
+          ) : (
+            <div className="h-full flex items-center justify-center text-gray-500">
+              Select a conversation
             </div>
-          ))}
-          <div ref={messagesEndRef}></div>
+          )}
+          <div ref={messagesEndRef} />
         </div>
 
         {/* Input */}
-        <div className="p-4 flex gap-2 items-center">
+        <div className="p-3 border-t bg-base-100 flex items-center gap-2 z-10">
+          <button className="btn btn-ghost btn-circle" title="Attach">
+            <Paperclip size={18} />
+          </button>
+
           <input
             type="text"
-            placeholder="Type a message"
-            className="input input-bordered w-full rounded-full"
+            placeholder={
+              selectedChat
+                ? "Type a message..."
+                : "Select a chat to start messaging"
+            }
             value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+            onChange={(e) => {
+              setNewMessage(e.target.value);
+              if (selectedChat) emitTyping();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
+            disabled={!selectedChat}
+            className="input input-bordered flex-1"
           />
-          <button className="btn btn-primary rounded-full px-6" onClick={sendMessage}>
-            Send
+
+          <button className="btn btn-ghost btn-circle" title="Emoji">
+            <Smile size={18} />
+          </button>
+
+          <button
+            onClick={sendMessage}
+            disabled={!selectedChat || !newMessage.trim() || sending}
+            className="btn btn-primary"
+          >
+            <Send size={18} />
           </button>
         </div>
       </div>
     </div>
   );
-};
-
-export default ChatPage;
+}

@@ -18,16 +18,21 @@ export const sendMessage = asyncHandler(async (req, res) => {
     chat: chatId,
   };
 
+  // ✅ Create the message
   let message = await Message.create(newMessage);
 
-  message = await message.populate("sender", "name email");
-  message = await message.populate("chat");
-  message = await User.populate(message, {
-    path: "chat.users",
-    select: "name email",
-  });
+  // ✅ Refetch with full population (important for socket)
+  message = await Message.findById(message._id)
+    .populate("sender", "name email profilePic")   // make sure to match your User model field (use `profilePic` not `pic`)
+    .populate({
+      path: "chat",
+      populate: {
+        path: "users",
+        select: "name email profilePic",           // all users in the chat
+      },
+    });
 
-  // update latest message in chat
+  // ✅ Update latest message in chat
   await Chat.findByIdAndUpdate(chatId, { latestMessage: message });
 
   res.json(message);
@@ -36,8 +41,11 @@ export const sendMessage = asyncHandler(async (req, res) => {
 // 2. Get all messages in a chat
 export const allMessages = asyncHandler(async (req, res) => {
   const messages = await Message.find({ chat: req.params.chatId })
-    .populate("sender", "name email")
-    .populate("chat");
+    .populate("sender", "name email profilePic")
+    .populate({
+      path: "chat",
+      populate: { path: "users", select: "name email profilePic" },
+    });
 
   res.json(messages);
 });

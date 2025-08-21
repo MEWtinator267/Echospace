@@ -7,7 +7,7 @@ function HeaderLoggedIn() {
   const { theme, toggleTheme } = useContext(ThemeContext);
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
-  const [friends, setFriends] = useState([]); // ✅ track friends instantly
+  // Removed unused friends state
   const loggedInUser = JSON.parse(localStorage.getItem("user"));
 
   const fetchNotifications = async () => {
@@ -24,7 +24,7 @@ function HeaderLoggedIn() {
 
   const acceptFriendRequest = async (notificationId, requesterId) => {
     try {
-      const { data } = await axios.post(
+      await axios.post(
         `/api/friends/accept`,
         { requesterId },
         { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
@@ -33,10 +33,7 @@ function HeaderLoggedIn() {
       // ✅ Remove notification from list
       setNotifications(prev => prev.filter(n => n._id !== notificationId));
 
-      // ✅ Add new friend to local state instantly
-      if (data.friend) {
-        setFriends(prev => [...prev, data.friend]);
-      }
+      // Friend accepted, you may want to update friends list elsewhere if needed
 
       alert("Friend request accepted!");
     } catch (err) {

@@ -1,10 +1,8 @@
 // routes/friendRoutes.js
 
 import express from "express";
-import { sendFriendRequest, acceptFriendRequest } from "../controllers/friendController.js";
+import { sendFriendRequest, acceptFriendRequest,rejectFriendRequest,searchUsers,getFriendsList, getFriendCount } from "../Controllers/friendController.js";
 import { protect } from "../Middleware/auth.js";
-import { rejectFriendRequest } from "../controllers/friendController.js";
-import { searchUsers } from "../controllers/friendController.js";
 
 const router = express.Router();
 
@@ -12,5 +10,8 @@ router.post("/send", protect, sendFriendRequest);
 router.post("/accept", protect, acceptFriendRequest);
 router.post("/reject", protect, rejectFriendRequest);
 router.get("/search", protect, searchUsers);
+router.get("/count",protect,getFriendCount);
+router.get("/list", protect, getFriendsList);
+
 
 export default router;

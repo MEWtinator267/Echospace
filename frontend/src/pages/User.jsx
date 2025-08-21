@@ -1,45 +1,45 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
+import axios from "axios";
+import { useUser } from "../Utils/UserContext.jsx";
 
 const dashboardBg =
   "https://res.cloudinary.com/dpki2sd5o/image/upload/v1754573098/joe-woods-4Zaq5xY5M_c-unsplash_wcuzb5.jpg";
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const localUser = JSON.parse(localStorage.getItem("user"));
+  const { user } = useUser();
   const [showSearch, setShowSearch] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [userId, setUserId] = useState("Loading...");
+  const [totalfriends,settotalfriends] = useState("");
 
   useEffect(() => {
-    // Fetch full user info from backend (with user ID)
-    const fetchUser = async () => {
-      try {
-        const res = await axios.get("/api/user/profile", {
-          headers: {
-            Authorization: `Bearer ${localUser?.token}`,
-          },
-        });
-        setUserId(res.data._id);
-      } catch (err) {
-        console.error(err);
-        setUserId("Unavailable");
-      }
-    };
-    if (localUser?.token) fetchUser();
-  }, [localUser]);
+    console.log("User from context:", user);
+    if (user) {
+      setUserId(user.id || user._id || "Unavailable");
+    } else {
+      setUserId("Unavailable");
+    }
+  }, [user]);
 
   const handleSearch = async () => {
     if (!searchValue.trim()) return;
 
     try {
-      const res = await axios.get(`/api/user/search?query=${searchValue}`, {
-        headers: {
-          Authorization: `Bearer ${localUser.token}`,
-        },
+      console.log("Searching for user:", searchValue);
+
+      if (!userId || userId === "Unavailable") {
+        toast.error("User ID not loaded yet. Try again shortly.");
+        return;
+      }
+
+      const res = await axios.get(`/api/friends/search?query=${searchValue}`, {
+        headers: { Authorization: `Bearer ${user.token}` },
       });
+
+      console.log("Search response data:", res.data);
 
       if (res.data.length === 0) {
         toast.warn("User not found.");
@@ -47,26 +47,39 @@ const Dashboard = () => {
       }
 
       const foundUser = res.data[0];
-      if (foundUser._id === userId) {
+
+      console.log("Found user:", foundUser);
+      console.log("Current user ID:", userId);
+
+      if (
+        foundUser._id &&
+        userId &&
+        foundUser._id.toString() === userId.toString()
+      ) {
         toast.info("You cannot add yourself.");
         return;
       }
 
-      // Send friend request
+      console.log(`Sending friend request from ${userId} to ${foundUser._id}`);
+
       await axios.post(
-  "/api/friends/send",
-  { targetUserId: foundUser._id },
-  {
-    headers: { Authorization: `Bearer ${localUser.token}` },
-  }
-);
+        "/api/friends/send",
+        { targetUserId: foundUser._id },
+        {
+          headers: { Authorization: `Bearer ${user.token}` },
+        }
+      );
 
       toast.success(`Friend request sent to ${foundUser.name}`);
       setSearchValue("");
       setShowSearch(false);
     } catch (err) {
-      console.error(err);
-      toast.error("Error sending friend request.");
+      console.error("Error in handleSearch:", err.response?.data || err.message);
+      if (err.response?.data?.message) {
+        toast.info(err.response?.data?.message)
+      }else{
+        toast.error("Error sending friend request.");
+      }
     }
   };
 
@@ -78,6 +91,25 @@ const Dashboard = () => {
   const handleGoToChat = () => {
     navigate("/user/chat");
   };
+
+  useEffect(() => {
+  const handleCount = async () => {
+    try {
+      if (!user?.token) return; // Prevent call if token not ready
+
+      const res = await axios.get("/api/user/count", {
+        headers: { Authorization: `Bearer ${user.token}` },
+      });
+
+      settotalfriends(res.data.count);
+    } catch (error) {
+      console.error("Error in getting friends:", error);
+    }
+  };
+
+  handleCount();
+}, [user?.token]);
+
 
   return (
     <div className="relative min-h-screen overflow-hidden">
@@ -102,7 +134,7 @@ const Dashboard = () => {
                 <div className="w-28 h-28 rounded-full ring ring-primary ring-offset-base-100 ring-offset-2">
                   <img
                     src={
-                      localUser?.profilePic ||
+                      user?.profilePic ||
                       "https://placehold.co/100x100?text=User"
                     }
                     alt="Profile"
@@ -111,7 +143,7 @@ const Dashboard = () => {
                 </div>
               </div>
               <h1 className="text-5xl font-bold">
-                Welcome, {localUser?.name || "User"}!
+                Welcome, {user?.name || "User"}!
               </h1>
               <p className="text-base-content/70 text-lg mt-4">
                 Let’s get you started 👋
@@ -123,14 +155,10 @@ const Dashboard = () => {
               </p>
 
               {/* Stats */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full mt-10">
-                <div className="stat bg-base-200 text-base-content rounded-xl shadow-sm">
-                  <div className="stat-title">Messages</div>
-                  <div className="stat-value text-xl">12</div>
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full mt-10">
                 <div className="stat bg-base-200 text-base-content rounded-xl shadow-sm">
                   <div className="stat-title">Friends</div>
-                  <div className="stat-value text-xl">8</div>
+                  <div className="stat-value text-xl">{totalfriends}</div>
                 </div>
                 <div className="stat bg-base-200 text-base-content rounded-xl shadow-sm">
                   <div className="stat-title">Active</div>
@@ -196,7 +224,7 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
-      <ToastContainer/>
+      <ToastContainer />
     </div>
   );
 };

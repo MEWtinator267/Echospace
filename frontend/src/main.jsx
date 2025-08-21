@@ -13,6 +13,7 @@ import Homepage2 from './pages/User.jsx';
 import Profile from './pages/Profile.jsx';
 import { HF3 } from './Layout/HF3.jsx';
 import ChatPage from './pages/Chatpage.jsx';
+import { UserProvider } from './Utils/UserContext.jsx';
 
 const route = createBrowserRouter([
   {
@@ -71,7 +72,9 @@ const route = createBrowserRouter([
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ThemeProvider> 
-      <RouterProvider router={route} />
+      <UserProvider>
+        <RouterProvider router={route} />
+      </UserProvider>
     </ThemeProvider>
   </StrictMode>
 );
