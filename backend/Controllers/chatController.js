@@ -8,15 +8,21 @@ export const accessChat = asyncHandler(async (req, res) => {
   const { userId } = req.body;
   if (!userId) return res.status(400).send("UserId param not sent");
 
+  console.log("🔍 accessChat called:", {
+    requestingUserId: req.user.id, // ✅ Fixed: use req.user.id
+    targetUserId: userId
+  });
+
   try {
     let chat = await Chat.findOne({
       isGroupChat: false,
-      users: { $all: [req.user._id, userId] },
+      users: { $all: [req.user.id, userId] }, // ✅ Fixed: use req.user.id
     })
       .populate("users", "-password")
       .populate("latestMessage");
 
     if (chat) {
+      console.log("✅ Existing chat found:", chat._id);
       chat = await AllUser.populate(chat, {
         path: "latestMessage.sender",
         select: "name email",
@@ -24,11 +30,13 @@ export const accessChat = asyncHandler(async (req, res) => {
       return res.status(200).json(chat);
     }
 
+    console.log("🆕 Creating new chat between users:", req.user.id, "and", userId);
+
     // If no chat, create new
     const newChatData = {
       chatName: "sender",
       isGroupChat: false,
-      users: [req.user._id, userId],
+      users: [req.user.id, userId], // ✅ Fixed: use req.user.id
     };
 
     const createdChat = await Chat.create(newChatData);
@@ -37,6 +45,7 @@ export const accessChat = asyncHandler(async (req, res) => {
       "-password"
     );
 
+    console.log("✅ New chat created:", fullChat._id);
     return res.status(200).json(fullChat);
   } catch (err) {
     console.error("Error in accessChat:", err);
@@ -50,7 +59,7 @@ export const accessChat = asyncHandler(async (req, res) => {
 export const fetchChats = asyncHandler(async (req, res) => {
   try {
     let chats = await Chat.find({
-      users: { $elemMatch: { $eq: req.user._id } },
+      users: { $elemMatch: { $eq: req.user.id } }, // ✅ Fixed: use req.user.id
     })
       .populate("users", "-password")
       .populate("groupAdmin", "-password")
@@ -88,13 +97,13 @@ export const createGroupChat = asyncHandler(async (req, res) => {
         .send("Group should have at least 3 people including you");
     }
 
-    parsedUsers.push(req.user._id);
+    parsedUsers.push(req.user.id); // ✅ Fixed: use req.user.id
 
     const groupChat = await Chat.create({
       chatName: name,
       users: parsedUsers,
       isGroupChat: true,
-      groupAdmin: req.user._id,
+      groupAdmin: req.user.id, // ✅ Fixed: use req.user.id
     });
 
     const fullGroup = await Chat.findById(groupChat._id)

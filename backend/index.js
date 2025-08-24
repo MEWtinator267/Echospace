@@ -11,7 +11,10 @@ import AccessLogic from "./Routes/AccessRoute.js";
 import messageRoutes from "./Routes/messageRoutes.js";
 import friendRoutes from "./Routes/friendRoutes.js";
 import notificationRoutes from "./Routes/notificationRoutes.js";
-import chatRoutes from "./Routes/Chatroutes.js";
+import chatRoutes from "./Routes/chatRoutes.js";
+
+// Import controller util to inject io
+import { setSocketServer } from "./Controllers/messageController.js";
 
 dotenv.config();
 connect();
@@ -29,7 +32,6 @@ app.use("/api/message", messageRoutes);
 app.use("/api/friends", friendRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/notifications", notificationRoutes);
-app.use("/api/user", friendRoutes); // ⚠️ might be duplicate of /api/friends
 
 // Create HTTP server for socket.io
 const server = http.createServer(app);
@@ -38,11 +40,14 @@ const server = http.createServer(app);
 const io = new Server(server, {
   pingTimeout: 60000,
   cors: {
-    origin: "http://localhost:5173", // ✅ frontend URL
+    origin: ["http://localhost:5173", "http://localhost:5174", "http://localhost:4173"], // ✅ Allow all dev and preview ports
     methods: ["GET", "POST"],
     credentials: true,
   },
 });
+
+// ✅ Inject io into msgController so it can emit messages
+setSocketServer(io);
 
 // Socket.IO logic
 io.on("connection", (socket) => {
@@ -60,40 +65,18 @@ io.on("connection", (socket) => {
   socket.on("join chat", (roomId) => {
     socket.join(roomId);
     console.log("📌 User joined chat room:", roomId);
+    console.log("👥 Current room members:", io.sockets.adapter.rooms.get(roomId)?.size || 0);
   });
 
   // Typing indicators
-  socket.on("typing", (room) => socket.in(room).emit("typing"));
-  socket.on("stop typing", (room) => socket.in(room).emit("stop typing"));
-
-  // Handle new message
-  socket.on("new message", (newMessageReceived) => {
-    try {
-      if (!newMessageReceived?.chat) {
-        console.log("❌ Chat not defined in message");
-        return;
-      }
-
-      const chat = newMessageReceived.chat;
-
-      if (!chat.users || chat.users.length === 0) {
-        console.log("❌ No users found in chat");
-        return;
-      }
-
-      chat.users.forEach((user) => {
-        if (!user?._id || !newMessageReceived?.sender?._id) return;
-
-        // Skip sender
-        if (user._id.toString() === newMessageReceived.sender._id.toString())
-          return;
-
-        // Emit to other users
-        socket.in(user._id.toString()).emit("message received", newMessageReceived);
-      });
-    } catch (err) {
-      console.error("🔥 Socket error in new message:", err);
-    }
+  socket.on("typing", (room) => {
+    socket.in(room).emit("typing", room);
+    console.log("👀 User typing in room:", room);
+  });
+  
+  socket.on("stop typing", (room) => {
+    socket.in(room).emit("stop typing", room);
+    console.log("✋ User stopped typing in room:", room);
   });
 
   // Disconnect handler
@@ -106,3 +89,6 @@ io.on("connection", (socket) => {
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
+
+// ✅ Export io if needed elsewhere
+export { io };

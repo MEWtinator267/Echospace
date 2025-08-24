@@ -1,5 +1,5 @@
 // ChatPage.jsx
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import axios from "axios";
 import io from "socket.io-client";
 import {
@@ -14,11 +14,17 @@ import {
 import { useUser } from "../Utils/UserContext.jsx";
 
 const ENDPOINT = "http://localhost:8000";
-let socket;
-let selectedChatCompare;
 
 export default function ChatPage() {
+  console.log("🎯 ChatPage component is rendering");
+  
   const { user } = useUser();
+  
+  console.log("👤 Current user:", user);
+  
+  // Use useRef for socket and selectedChatCompare to persist across renders
+  const socketRef = useRef(null);
+  const selectedChatCompareRef = useRef(null);
 
   const [chats, setChats] = useState([]);
   const [friends, setFriends] = useState([]);
@@ -41,39 +47,108 @@ export default function ChatPage() {
       : "";
 
   const otherUserFromChat = (chat) =>
-    chat?.users?.find((u) => u._id !== user?._id) || null;
+    chat?.users?.find((u) => u._id !== (user?._id || user?.id)) || null;
 
-  const mapServerMsgToUI = (m) => ({
-    id: m._id || Date.now().toString(),
-    content: m.content || m.text || "",
-    timestamp: m.createdAt ? formatTime(m.createdAt) : formatTime(new Date()),
-    isOwn:
-      (m?.sender && (m.sender._id === user?._id || m.sender === user?._id)) ||
-      false,
-    status: m?.sender?._id === user?._id ? "sent" : "read",
-    raw: m,
-  });
+  const mapServerMsgToUI = useCallback((m) => {
+    // Handle sender ID - could be populated object or just an ID string
+    const senderId = m?.sender?._id || m?.sender;
+    const currentUserId = user?._id || user?.id;
+    
+    return {
+      id: m._id || Date.now().toString(),
+      content: m.content || m.text || "",
+      timestamp: m.createdAt ? formatTime(m.createdAt) : formatTime(new Date()),
+      isOwn: senderId === currentUserId,
+      status: senderId === currentUserId ? "sent" : "read",
+      raw: m,
+    };
+  }, [user]);
 
   // ---------- Socket ----------
   useEffect(() => {
-    if (!user) return;
+    const userId = user?._id || user?.id;
+    if (!user || !userId) {
+      console.log("⚠️ No user or user ID available, skipping socket connection");
+      return;
+    }
 
-    socket = io(ENDPOINT, { withCredentials: true });
+    console.log("🔌 Initializing socket connection for user:", userId);
+    
+    socketRef.current = io(ENDPOINT, { 
+      withCredentials: true,
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5,
+      timeout: 20000
+    });
 
-    socket.emit("setup", user);
+    socketRef.current.emit("setup", user);
 
-    socket.on("connect", () => console.log("Socket connected:", socket.id));
-    socket.on("disconnect", () => console.log("Socket disconnected"));
+    socketRef.current.on("connect", () => {
+      console.log("✅ Socket connected:", socketRef.current.id);
+    });
+    
+    socketRef.current.on("disconnect", (reason) => {
+      console.log("❌ Socket disconnected:", reason);
+    });
+
+    socketRef.current.on("connect_error", (error) => {
+      console.error("🚫 Socket connection error:", error);
+    });
 
     const onMessageReceived = (newMsgReceived) => {
-      // ✅ only add if it's for the active chat
-      if (
-        !selectedChatCompare ||
-        selectedChatCompare._id !== newMsgReceived.chat._id
-      ) {
+      console.log("📨 Received message via Socket.IO:", newMsgReceived);
+      console.log("📊 Current selectedChatCompareRef:", selectedChatCompareRef.current);
+      console.log("📊 Current user:", user);
+      
+      // ✅ Validate message structure - check if sender is populated or just an ID
+      if (!newMsgReceived || !newMsgReceived.chat) {
+        console.warn("⚠️ Invalid message received - missing basic structure:", newMsgReceived);
         return;
       }
-      setMessages((prev) => [...prev, mapServerMsgToUI(newMsgReceived)]);
+
+      // Handle case where sender might not be populated (just an ID)
+      const senderId = newMsgReceived.sender?._id || newMsgReceived.sender?.id || newMsgReceived.sender;
+      if (!senderId) {
+        console.warn("⚠️ Invalid message received - no sender information:", newMsgReceived);
+        return;
+      }
+      
+      // ✅ only add if it's for the active chat
+      if (
+        !selectedChatCompareRef.current ||
+        selectedChatCompareRef.current._id !== newMsgReceived.chat._id
+      ) {
+        console.log("🚫 Message not for active chat:", {
+          messageChat: newMsgReceived.chat._id,
+          activeChat: selectedChatCompareRef.current?._id
+        });
+        return;
+      }
+      
+      // ✅ Don't add if it's from the current user (avoid duplicates)
+      const currentUserId = user?._id || user?.id;
+      if (senderId === currentUserId) {
+        console.log("🚫 Own message received via socket, ignoring to prevent duplicate");
+        return;
+      }
+      
+      console.log("✅ Adding message from another user:", {
+        senderId,
+        currentUserId,
+        content: newMsgReceived.content
+      });
+      
+      // ✅ Check for duplicate message IDs
+      setMessages((prev) => {
+        const messageExists = prev.some(msg => msg.id === newMsgReceived._id);
+        if (messageExists) {
+          console.log("🚫 Duplicate message ID detected, skipping");
+          return prev; // Don't add duplicate
+        }
+        console.log("📝 Adding new message to state");
+        return [...prev, mapServerMsgToUI(newMsgReceived)];
+      });
     };
 
     const onTyping = (chatId) => {
@@ -83,17 +158,19 @@ export default function ChatPage() {
       if (selectedChat && selectedChat._id === chatId) setOtherTyping(false);
     };
 
-    socket.on("message received", onMessageReceived);
-    socket.on("typing", onTyping);
-    socket.on("stop typing", onStopTyping);
+    socketRef.current.on("message received", onMessageReceived);
+    socketRef.current.on("typing", onTyping);
+    socketRef.current.on("stop typing", onStopTyping);
 
     return () => {
-      socket.off("message received", onMessageReceived);
-      socket.off("typing", onTyping);
-      socket.off("stop typing", onStopTyping);
-      socket.disconnect();
+      if (socketRef.current) {
+        socketRef.current.off("message received", onMessageReceived);
+        socketRef.current.off("typing", onTyping);
+        socketRef.current.off("stop typing", onStopTyping);
+        socketRef.current.disconnect();
+      }
     };
-  }, [user?._id]);
+  }, [user, mapServerMsgToUI, selectedChat]);
 
   // ---------- Load chats ----------
   useEffect(() => {
@@ -130,7 +207,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (!selectedChat || !user?.token) {
       setMessages([]);
-      selectedChatCompare = null;
+      selectedChatCompareRef.current = null;
       return;
     }
 
@@ -144,8 +221,10 @@ export default function ChatPage() {
         setMessages(uiMsgs);
 
         // ✅ join chat room
-        socket.emit("join chat", selectedChat._id);
-        selectedChatCompare = selectedChat;
+        if (socketRef.current) {
+          socketRef.current.emit("join chat", selectedChat._id);
+        }
+        selectedChatCompareRef.current = selectedChat;
       } catch (err) {
         console.error("fetch messages error:", err?.response?.data || err.message);
         setMessages([]);
@@ -153,7 +232,7 @@ export default function ChatPage() {
     };
 
     fetchMessages();
-  }, [selectedChat, user?.token]);
+  }, [selectedChat, user?.token, mapServerMsgToUI]);
 
   // ---------- Auto scroll ----------
   useEffect(() => {
@@ -173,8 +252,8 @@ export default function ChatPage() {
 
       setSelectedChat(data);
 
-      if (socket && data?._id) {
-        socket.emit("join chat", data._id);
+      if (socketRef.current && data?._id) {
+        socketRef.current.emit("join chat", data._id);
       }
 
       setChats((prev) => {
@@ -191,44 +270,64 @@ export default function ChatPage() {
 
   // ---------- Typing ----------
   const emitTyping = () => {
-    if (!selectedChat) return;
-    socket.emit("typing", selectedChat._id);
+    if (!selectedChat || !socketRef.current) return;
+    socketRef.current.emit("typing", selectedChat._id);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      socket.emit("stop typing", selectedChat._id);
+      if (socketRef.current) {
+        socketRef.current.emit("stop typing", selectedChat._id);
+      }
     }, 1500);
   };
 
   // ---------- Send message ----------
   const sendMessage = async () => {
-    if (!newMessage.trim() || !selectedChat || sending || !user?.token) return;
-    try {
-      setSending(true);
-      const { data } = await axios.post(
-        `${ENDPOINT}/api/message`,
-        { content: newMessage.trim(), chatId: selectedChat._id },
-        { headers: { Authorization: `Bearer ${user.token}` } }
-      );
+  if (!newMessage.trim() || !selectedChat || sending || !user?.token) return;
+  try {
+    setSending(true);
+    const { data } = await axios.post(
+      `${ENDPOINT}/api/message`,
+      { content: newMessage.trim(), chatId: selectedChat._id },
+      { headers: { Authorization: `Bearer ${user.token}` } }
+    );
 
-      setMessages((prev) => [...prev, mapServerMsgToUI(data)]);
+    // ✅ local add (sender) - check for duplicates
+    setMessages((prev) => {
+      const messageExists = prev.some(msg => msg.id === data._id);
+      if (messageExists) {
+        return prev; // Don't add duplicate
+      }
+      return [...prev, mapServerMsgToUI(data)];
+    });
 
-      // ✅ emit new message to socket
-      socket.emit("new message", data);
+    setNewMessage("");
+  } catch (err) {
+    console.error("sendMessage error:", err?.response?.data || err.message);
+  } finally {
+    setSending(false);
+  }
+};
 
-      setNewMessage("");
-    } catch (err) {
-      console.error("sendMessage error:", err?.response?.data || err.message);
-    } finally {
-      setSending(false);
-    }
-  };
 
-  if (!user)
+  if (!user) {
+    console.log("⚠️ No user found, showing loading screen");
+    return (
+      <div className="h-[92vh] flex items-center justify-center text-gray-500">
+        Loading user data...
+      </div>
+    );
+  }
+
+  if (!user._id && !user.id) {
+    console.log("⚠️ User found but no _id or id, showing login prompt");
     return (
       <div className="h-[92vh] flex items-center justify-center text-gray-500">
         Please log in to view chats.
       </div>
     );
+  }
+
+  console.log("✅ User is valid, continuing with chat page render");
 
   const other = selectedChat ? otherUserFromChat(selectedChat) : null;
 
