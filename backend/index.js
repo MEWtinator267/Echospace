@@ -6,14 +6,14 @@ import http from "http";
 import { Server } from "socket.io";
 import connect from "./models/dbconnect.js";
 
-// Routes
+
 import AccessLogic from "./Routes/AccessRoute.js";
 import messageRoutes from "./Routes/messageRoutes.js";
 import friendRoutes from "./Routes/friendRoutes.js";
 import notificationRoutes from "./Routes/notificationRoutes.js";
 import chatRoutes from "./Routes/chatRoutes.js";
+import uploadRoutes from "./Routes/uploadRoutes.js";
 
-// Import controller util to inject io
 import { setSocketServer } from "./Controllers/messageController.js";
 
 dotenv.config();
@@ -32,8 +32,10 @@ app.use("/api/message", messageRoutes);
 app.use("/api/friends", friendRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use('/api/upload', uploadRoutes);
+app.use('/api/upload', uploadRoutes);
 
-// Create HTTP server for socket.io
+
 const server = http.createServer(app);
 
 // Setup Socket.IO

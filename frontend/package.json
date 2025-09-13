@@ -10,10 +10,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.8",
     "@tailwindcss/vite": "^4.1.11",
     "aos": "^2.3.4",
     "axios": "^1.11.0",
     "daisyui": "^5.0.47",
+    "emoji-picker-react": "^4.13.3",
+    "framer-motion": "^12.23.12",
     "lucide-react": "^0.539.0",
     "nodemon": "^3.1.10",
     "react": "^19.1.0",
@@ -21,6 +24,7 @@
     "react-router-dom": "^7.7.1",
     "react-toastify": "^11.0.5",
     "socket.io-client": "^4.8.1",
+    "tailwind-scrollbar": "^4.0.2",
     "tailwindcss": "^4.1.11",
     "tailwindcss-animate": "^1.0.7"
   },

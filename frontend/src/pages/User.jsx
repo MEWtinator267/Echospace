@@ -160,10 +160,6 @@ const Dashboard = () => {
                   <div className="stat-title">Friends</div>
                   <div className="stat-value text-xl">{totalfriends}</div>
                 </div>
-                <div className="stat bg-base-200 text-base-content rounded-xl shadow-sm">
-                  <div className="stat-title">Active</div>
-                  <div className="stat-value text-xl">5</div>
-                </div>
               </div>
             </div>
           </div>

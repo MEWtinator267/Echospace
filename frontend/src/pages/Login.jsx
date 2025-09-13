@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { handleerror, handlesuccess } from '../Utils/taostify';
 import { ToastContainer } from 'react-toastify';
@@ -54,6 +54,12 @@ function Login() {
     setLoginInfo(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handlesubmit();
+    }
+  };
+
   return (
     <div className="relative min-h-screen overflow-hidden">
       {/* Background */}
@@ -83,6 +89,7 @@ function Login() {
                   className="input input-bordered w-full"
                   onChange={handlechange}
                   value={LoginInfo.email}
+                  onKeyDown={handleKeyDown}
                 />
               </div>
 
@@ -95,6 +102,7 @@ function Login() {
                   className="input input-bordered w-full"
                   onChange={handlechange}
                   value={LoginInfo.password}
+                  onKeyDown={handleKeyDown}
                 />
               </div>
 

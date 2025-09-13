@@ -4,7 +4,6 @@ const UserContext = createContext();
 
 export const UserProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
-    // Load from localStorage immediately when component mounts
     const storedUser = localStorage.getItem("user");
     const storedToken = localStorage.getItem("token");
     return storedUser && storedToken
@@ -12,7 +11,6 @@ export const UserProvider = ({ children }) => {
       : null;
   });
 
-  // Keep localStorage in sync when user changes
   const updateUser = (newUser) => {
     if (newUser) {
       localStorage.setItem("user", JSON.stringify(newUser));
