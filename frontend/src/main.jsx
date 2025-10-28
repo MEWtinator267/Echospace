@@ -15,6 +15,8 @@ import { HF3 } from './Layout/HF3.jsx';
 import ChatPage from './pages/Chatpage.jsx';
 import { UserProvider } from './Utils/UserContext.jsx';
 
+
+
 const route = createBrowserRouter([
   {
     path: '/',
@@ -47,14 +49,9 @@ const route = createBrowserRouter([
     element:<HF2/>,
     children:[
       {
-        index:true,
-        element:<Homepage2/>
-      },
-      {
         path:'/user/profile',
         element:<Profile/>
       }
-      
     ]
   },
   {

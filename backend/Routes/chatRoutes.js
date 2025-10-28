@@ -5,7 +5,9 @@ import {
   createGroupChat,
   renameGroup,
   addToGroup,
-  removeFromGroup
+  removeFromGroup,
+  deleteChat,
+  softDeleteChat
 } from "../Controllers/chatController.js"; // 
 import { protect } from "../Middleware/auth.js";
 
@@ -17,5 +19,8 @@ router.post("/group", protect, createGroupChat);
 router.put("/rename", protect, renameGroup);
 router.put("/groupadd", protect, addToGroup);
 router.put("/groupremove", protect, removeFromGroup);
+router.delete("/:id", protect, deleteChat);
+router.route("/soft/:chatId").put(protect, softDeleteChat);
+
 
 export default router;

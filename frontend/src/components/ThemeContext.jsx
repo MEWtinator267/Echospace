@@ -1,5 +1,5 @@
 // ThemeContext.jsx
-import React, { createContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 
 const ThemeContext = createContext();
 
@@ -9,14 +9,18 @@ export const ThemeProvider = ({ children }) => {
   useEffect(() => {
     const saved = localStorage.getItem('theme') || 'light';
     setTheme(saved);
+    // This line allows DaisyUI components to use the theme
     document.documentElement.setAttribute('data-theme', saved);
 
+    // This block now uses a more soothing color palette
     if (saved === 'light') {
-      document.body.classList.add('bg-gray-100', 'text-gray-900');
-      document.body.classList.remove('bg-base-100', 'text-base-content');
+      // Light Mode: Soft off-white background with dark slate text
+      document.body.classList.add('bg-slate-50', 'text-slate-800');
+      document.body.classList.remove('bg-slate-900', 'text-slate-200');
     } else {
-      document.body.classList.add('bg-base-100', 'text-base-content');
-      document.body.classList.remove('bg-gray-100', 'text-gray-900');
+      // Dark Mode: Deep charcoal background with soft off-white text
+      document.body.classList.add('bg-slate-900', 'text-slate-200');
+      document.body.classList.remove('bg-slate-50', 'text-slate-800');
     }
   }, []);
 
@@ -26,12 +30,15 @@ export const ThemeProvider = ({ children }) => {
     document.documentElement.setAttribute('data-theme', newTheme);
     localStorage.setItem('theme', newTheme);
 
+    // This block now uses a more soothing color palette
     if (newTheme === 'light') {
-      document.body.classList.add('bg-gray-100', 'text-gray-900');
-      document.body.classList.remove('bg-base-100', 'text-base-content');
+      // Light Mode: Soft off-white background with dark slate text
+      document.body.classList.add('bg-slate-50', 'text-slate-800');
+      document.body.classList.remove('bg-slate-900', 'text-slate-200');
     } else {
-      document.body.classList.add('bg-base-100', 'text-base-content');
-      document.body.classList.remove('bg-gray-100', 'text-gray-900');
+      // Dark Mode: Deep charcoal background with soft off-white text
+      document.body.classList.add('bg-slate-900', 'text-slate-200');
+      document.body.classList.remove('bg-slate-50', 'text-slate-800');
     }
   };
 
@@ -41,5 +48,8 @@ export const ThemeProvider = ({ children }) => {
     </ThemeContext.Provider>
   );
 };
+
+// You can create a custom hook for easier access in other components
+export const useTheme = () => useContext(ThemeContext);
 
 export default ThemeContext;

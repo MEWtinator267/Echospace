@@ -7,6 +7,8 @@ const chatSchema = new mongoose.Schema(
     users: [{ type: mongoose.Schema.Types.ObjectId, ref: "AllUser" }], // ✅ fixed
     latestMessage: { type: mongoose.Schema.Types.ObjectId, ref: "Message" },
     groupAdmin: { type: mongoose.Schema.Types.ObjectId, ref: "AllUser" }, // ✅ fixed
+    deletedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "AllUser" }], // ✅ soft delete flag
+
   },
   { timestamps: true }
 );

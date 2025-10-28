@@ -38,7 +38,6 @@ app.use('/api/upload', uploadRoutes);
 
 const server = http.createServer(app);
 
-// Setup Socket.IO
 const io = new Server(server, {
   pingTimeout: 60000,
   cors: {
@@ -48,29 +47,24 @@ const io = new Server(server, {
   },
 });
 
-// ✅ Inject io into msgController so it can emit messages
 setSocketServer(io);
 
-// Socket.IO logic
 io.on("connection", (socket) => {
   console.log("⚡ Socket connected:", socket.id);
 
-  // Join personal room (for notifications, DMs, etc.)
   socket.on("setup", (userData) => {
     if (!userData?._id) return;
     socket.join(userData._id);
     socket.emit("connected");
-    console.log("✅ User joined personal room:", userData._id);
+    console.log("User joined personal room:", userData._id);
   });
 
-  // Join chat room
   socket.on("join chat", (roomId) => {
     socket.join(roomId);
     console.log("📌 User joined chat room:", roomId);
-    console.log("👥 Current room members:", io.sockets.adapter.rooms.get(roomId)?.size || 0);
+    console.log("Current room members:", io.sockets.adapter.rooms.get(roomId)?.size || 0);
   });
 
-  // Typing indicators
   socket.on("typing", (room) => {
     socket.in(room).emit("typing", room);
     console.log("👀 User typing in room:", room);
@@ -78,19 +72,24 @@ io.on("connection", (socket) => {
   
   socket.on("stop typing", (room) => {
     socket.in(room).emit("stop typing", room);
-    console.log("✋ User stopped typing in room:", room);
+    console.log("User stopped typing in room:", room);
   });
 
-  // Disconnect handler
   socket.on("disconnect", () => {
     console.log("❌ User disconnected:", socket.id);
   });
+
+  // ✅ Handle message deletion event
+  socket.on("message deleted", ({ messageId, chatId }) => {
+    io.to(chatId).emit("message deleted", { messageId, chatId });
+  });
+  socket.on("chat deleted", ({ chatId }) => {
+    io.to(chatId).emit("chat deleted", { chatId });
+  });
 });
 
-// Start server
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
 
-// ✅ Export io if needed elsewhere
 export { io };

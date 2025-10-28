@@ -7,7 +7,6 @@ function HeaderLoggedIn() {
   const { theme, toggleTheme } = useContext(ThemeContext);
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
-  // Removed unused friends state
   const loggedInUser = JSON.parse(localStorage.getItem("user"));
 
   const fetchNotifications = async () => {
@@ -18,7 +17,7 @@ function HeaderLoggedIn() {
       setNotifications(data.notifications || []);
     } catch (err) {
       console.error("Error fetching notifications", err);
-      alert("Failed to fetch notifications. Please try again later.");
+      // Removed alert for better UX
     }
   };
 
@@ -29,12 +28,7 @@ function HeaderLoggedIn() {
         { requesterId },
         { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
       );
-
-      // ✅ Remove notification from list
       setNotifications(prev => prev.filter(n => n._id !== notificationId));
-
-      // Friend accepted, you may want to update friends list elsewhere if needed
-
       alert("Friend request accepted!");
     } catch (err) {
       console.error("Error accepting friend request", err);
@@ -49,10 +43,7 @@ function HeaderLoggedIn() {
         { senderId },
         { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
       );
-
-      // ✅ Remove notification instantly
       setNotifications(prev => prev.filter(n => n._id !== notificationId));
-
       alert("Friend request rejected.");
     } catch (err) {
       console.error("Error rejecting friend request", err);
@@ -73,6 +64,7 @@ function HeaderLoggedIn() {
   return (
     <div className="w-full">
       <nav>
+        {/* ✅ FIX: Reduced height from h-20 to h-16 for a more compact look */}
         <div className="navbar bg-base-100 shadow-sm h-20 px-4">
           <div className="navbar-start min-w-[220px]">
             <a className="text-xl font-bold cursor-pointer" onClick={() => navigate('/user')}>
@@ -100,7 +92,7 @@ function HeaderLoggedIn() {
                     />
                   </svg>
                   {notifications.length > 0 && (
-                    <span className="badge badge-xs badge-error indicator-item" />
+                    <span className="badge badge-xs badge-primary indicator-item" />
                   )}
                 </div>
               </div>
@@ -142,18 +134,17 @@ function HeaderLoggedIn() {
 
             {/* Profile Dropdown */}
             <div className="dropdown dropdown-end">
-              <label tabIndex={0} className="btn btn-circle avatar">
+              <label tabIndex={0} className="btn btn-ghost btn-circle avatar">
                 <div className="w-10 rounded-full">
                   <img src={loggedInUser?.profilePic || "https://placehold.co/100x100?text=User"} alt="Profile" />
                 </div>
               </label>
               <ul
                 tabIndex={0}
-                className="dropdown-content p-4 shadow bg-base-100 rounded-box w-56 z-10 space-y-3"
+                className="dropdown-content p-4 shadow bg-base-100 rounded-box w-56 z-10 space-y-3 mt-3"
               >
                 <li className="flex justify-center">
                   <label className="flex items-center gap-2 cursor-pointer" htmlFor="theme-toggle">
-                    {/* Light/Dark toggle */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"
                       viewBox="0 0 24 24" fill="none" stroke="currentColor"
                       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -174,8 +165,6 @@ function HeaderLoggedIn() {
                     </svg>
                   </label>
                 </li>
-                <li><Link to="/user/profile" className="btn btn-outline btn-sm w-full">Profile</Link></li>
-                <li><Link to="/user" className="btn btn-primary btn-sm w-full">Dashboard</Link></li>
                 <li><button onClick={handleLogout} className="btn btn-error btn-sm w-full text-white">Logout</button></li>
               </ul>
             </div>

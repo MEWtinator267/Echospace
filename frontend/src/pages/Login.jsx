@@ -36,7 +36,7 @@ function Login() {
         setUser({ ...user, token });
 
         setTimeout(() => {
-          navigate('/user');
+          navigate('/user/profile');
         }, 1500);
       } else {
         handleerror(message);

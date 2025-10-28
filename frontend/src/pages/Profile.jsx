@@ -1,221 +1,363 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import ThemeContext from "../components/ThemeContext";
-import { toast } from "react-toastify";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import axios from "axios";
+import { useUser } from "../Utils/UserContext.jsx";
+import {
+  User,
+  MessageSquare,
+  Settings,
+  Copy,
+  UploadCloud,
+  Mail,
+  Search,
+  Users,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
-const dashboardBg =
-  "https://res.cloudinary.com/dpki2sd5o/image/upload/v1754573098/joe-woods-4Zaq5xY5M_c-unsplash_wcuzb5.jpg";
+const ENDPOINT = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-const Profile = () => {
+const UnifiedDashboard = () => {
   const navigate = useNavigate();
+  const { user, setUser } = useUser();
 
-  const [user, setUser] = useState(JSON.parse(localStorage.getItem("user")) || {});
-  const username = user?.name || "User";
-  const userId = user?.id || "Unavailable";
+  const [searchValue, setSearchValue] = useState("");
+  const [totalFriends, setTotalFriends] = useState(0);
   const [showPrivateInfo, setShowPrivateInfo] = useState(false);
+  const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
+  const [friendsList, setFriendsList] = useState([]);
+  const [showFriends, setShowFriends] = useState(false);
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(userId);
-    toast.success("User ID copied to clipboard!");
-  };
+  // --- Theme ---
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("theme", theme);
+  }, [theme]);
 
-  const handleAvatarUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const handleThemeChange = () => setTheme(theme === "dark" ? "light" : "dark");
 
-    const formData = new FormData();
-    formData.append("avatar", file);
-
-    try {
-      const res = await fetch("http://localhost:8000/auth/upload-avatar", {
-        method: "POST",
-        body: formData,
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      });
-
-      const data = await res.json();
-      if (data.success) {
-  toast.success("Avatar updated!");
-
-  const updatedUser = { ...user, profilePic: data.profilePic };
-  localStorage.setItem("user", JSON.stringify(updatedUser));
-  setUser(updatedUser); // if user is stored in state
-
-      } else {
-        toast.error(data.message || "Upload failed");
+  // --- Fetch Friends + Count ---
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!user?.token) return;
+      try {
+        const [countRes, listRes] = await Promise.all([
+          axios.get("/api/friends/count", {
+            headers: { Authorization: `Bearer ${user.token}` },
+          }),
+          axios.get("/api/friends/list", {
+            headers: { Authorization: `Bearer ${user.token}` },
+          }),
+        ]);
+        setTotalFriends(countRes.data.count || 0);
+        setFriendsList(listRes.data.friends || []);
+      } catch (err) {
+        console.error("Friend data fetch failed:", err);
       }
-    } catch (error) {
-      toast.error("Something went wrong!");
-      console.error("Upload error:", error);
+    };
+    fetchData();
+  }, [user?.token]);
+
+  // --- Add Friend ---
+  const handleAddFriend = async () => {
+    if (!searchValue.trim()) return;
+    try {
+      const { data } = await axios.get(`/api/friends/search?query=${searchValue}`, {
+        headers: { Authorization: `Bearer ${user.token}` },
+      });
+      if (data.length === 0) return toast.warn("User not found.");
+      const foundUser = data[0];
+      if (foundUser._id === (user.id || user._id)) return toast.info("You cannot add yourself.");
+      await axios.post(
+        "/api/friends/send",
+        { targetUserId: foundUser._id },
+        { headers: { Authorization: `Bearer ${user.token}` } }
+      );
+      toast.success(`Friend request sent to ${foundUser.name}`);
+      setSearchValue("");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Error sending friend request.");
     }
   };
 
+  // --- Avatar Upload ---
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append("avatar", file);
+    try {
+      const { data } = await axios.post(`${ENDPOINT}/auth/upload-avatar`, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+          Authorization: `Bearer ${user.token}`,
+        },
+      });
+      if (data.success) {
+        toast.success("Avatar updated!");
+        const updatedUser = { ...user, profilePic: data.profilePic };
+        setUser(updatedUser);
+        localStorage.setItem("user", JSON.stringify(updatedUser));
+      }
+    } catch (error) {
+      toast.error("Avatar upload failed.");
+    }
+  };
+
+  const copyToClipboard = () => {
+    const userId = user?.id || user?._id || "";
+    navigator.clipboard.writeText(userId);
+    toast.success("User ID copied!");
+  };
+
+  const handleStartChat = async (friendId) => {
+    try {
+      const { data } = await axios.post(
+        "/api/chat",
+        { userId: friendId },
+        { headers: { Authorization: `Bearer ${user.token}` } }
+      );
+      localStorage.setItem("selectedChatId", data._id);
+      navigate("/user/chat");
+    } catch (err) {
+      toast.error("Failed to start chat.");
+    }
+  };
+
+  // --- Animations ---
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 100 } },
+  };
+
   return (
-    <div className="relative min-h-screen overflow-hidden">
-      {/* Theme Toggle */}
-      <div className="absolute top-6 right-6 z-20">
-        <ThemeContext />
+    <div className="min-h-screen w-full bg-base-200 text-base-content overflow-y-auto">
+      <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        <motion.div variants={containerVariants} initial="hidden" animate="visible">
+          {/* --- Hero Banner --- */}
+          <motion.div
+  variants={itemVariants}
+  className="relative h-64 bg-base-300 rounded-2xl shadow-lg overflow-visible "
+>
+  <img
+    src="https://images.unsplash.com/photo-1579546929518-9e396f3cc809?q=80&w=2940&auto=format&fit=crop"
+    alt="Profile banner"
+    className="w-full h-full object-cover opacity-60"
+  />
+
+  {/* Avatar properly positioned */}
+  <div className="absolute -bottom-16 left-10">
+    <div className="avatar relative group">
+      <div className="w-36 h-36 rounded-full ring-4 ring-base-100 shadow-2xl">
+        <img
+          src={
+            user?.profilePic ||
+            `https://ui-avatars.com/api/?name=${user?.name || "U"}&background=random`
+          }
+          alt="Profile"
+          className="object-cover w-full h-full"
+        />
       </div>
+      <label
+        htmlFor="avatarUpload"
+        className="absolute inset-0 flex items-center justify-center bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+      >
+        <UploadCloud size={32} />
+        <input
+          id="avatarUpload"
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleAvatarUpload}
+        />
+      </label>
+    </div>
+  </div>
+</motion.div>
 
-      {/* Back Button */}
-      <div className="absolute top-6 left-6 z-20">
-        <button
-          onClick={() => navigate("/")}
-          className="btn btn-ghost btn-circle"
-          aria-label="Back to Dashboard"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path>
-          </svg>
-        </button>
-      </div>
 
-      {/* Background */}
-      <div
-        className="absolute inset-0 z-0 animate-scroll-background bg-base-200/60"
-        style={{
-          backgroundImage: `url('${dashboardBg}')`,
-          backgroundRepeat: "repeat-y",
-          backgroundSize: "100% auto",
-          backgroundPosition: "0 0",
-        }}
-      ></div>
-
-      {/* Content */}
-      <div className="relative z-10 min-h-screen backdrop-blur-none bg-base-200/60 flex items-center justify-center px-4">
-        <div className="w-full max-w-4xl">
-          {/* Profile Header */}
-          <div className="bg-base-100 rounded-2xl px-8 py-8 mb-6">
-            <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
-              {/* Profile Picture with Upload Button */}
-              <div className="avatar relative">
-                <div className="w-32 h-32 rounded-full ring ring-primary ring-offset-base-100 ring-offset-2 overflow-hidden">
-                  <img
-                    src={user?.profilePic || "https://placehold.co/200x200?text=User"}
-                    alt="Profile"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-
-                {/* Upload Icon */}
-                <label
-                  htmlFor="avatarUpload"
-                  className="absolute bottom-2 right-2 bg-base-100 p-2 rounded-full shadow cursor-pointer hover:bg-primary hover:text-white transition-all"
-                  title="Upload Avatar"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h3m10-3v-1a2 2 0 00-2-2h-3M12 12v-7m0 0L9 8m3-3l3 3" />
-                  </svg>
-                  <input
-                    id="avatarUpload"
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleAvatarUpload}
-                  />
-                </label>
-              </div>
-
-              {/* Basic Info */}
-              <div className="flex-1 text-center md:text-left">
-                <h1 className="text-4xl font-bold mb-2">{username}</h1>
-                <div className="flex items-center justify-center md:justify-start gap-2 text-base-content/70">
-                  <span className="font-mono text-base break-all">ID: {userId}</span>
+          {/* --- Info Bar --- */}
+          <motion.div
+            variants={itemVariants}
+            className="bg-base-100 rounded-b-2xl shadow-lg pt-24 pb-10 px-10"
+          >
+            <div className="flex flex-col sm:flex-row items-center justify-between">
+              <div>
+                <h1 className="text-4xl font-bold">{user?.name}</h1>
+                <div className="flex items-center gap-1 text-base-content/60 mt-1">
+                  <span className="font-mono text-sm">
+                    ID: {user?.id || user?._id || "Unavailable"}
+                  </span>
                   <button
-                    className="btn btn-xs btn-outline btn-square"
+                    className="btn btn-ghost btn-xs btn-square"
                     onClick={copyToClipboard}
-                    aria-label="Copy User ID"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8l6 6v8a2 2 0 01-2 2h-2M8 16v2a2 2 0 002 2h6" />
-                    </svg>
+                    <Copy size={14} />
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 mt-4 sm:mt-0">
+                <div className="stat bg-transparent p-0">
+                  <div className="stat-title">Friends</div>
+                  <div className="stat-value text-2xl">{totalFriends}</div>
+                </div>
+                <button
+                  onClick={() => navigate("/user/chat")}
+                  className="btn btn-primary btn-md"
+                >
+                  Go to Chat <MessageSquare size={18} />
+                </button>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* --- Main Content Grid --- */}
+          <motion.div
+            variants={itemVariants}
+            className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6"
+          >
+            {/* Left: Search Section */}
+            <div className="lg:col-span-2 h-full">
+              <div className="bg-base-100 rounded-2xl shadow-lg p-8 min-h-[20rem] flex flex-col items-center justify-center text-center space-y-6">
+                <div>
+                  <h2 className="text-xl font-semibold flex items-center gap-2 mb-4">
+                    <Users size={20} /> Connect with Friends
+                  </h2>
+                  <p className="text-sm text-base-content/70 mb-4">
+                    Find new friends by searching their User ID or Name.
+                  </p>
+                </div>
+                <div className="join w-full">
+                  <input
+                    type="text"
+                    className="input input-bordered join-item w-full text-base"
+                    placeholder="Enter User ID or Name"
+                    value={searchValue}
+                    onChange={(e) => setSearchValue(e.target.value)}
+                  />
+                  <button
+                    onClick={handleAddFriend}
+                    className="btn btn-neutral join-item text-base"
+                    disabled={!searchValue.trim()}
+                  >
+                    <Search size={18} /> Send
                   </button>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Profile Details */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Contact Info */}
-            <div className="bg-base-100 rounded-2xl px-8 py-8">
-              <h2 className="text-2xl font-semibold mb-6 flex items-center gap-2">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                </svg>
-                Contact Information
-              </h2>
-
-              <div className="space-y-4">
-                {/* Email */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <svg className="w-5 h-5 text-base-content/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
-                    </svg>
-                    <span className="text-base-content/80">Email</span>
+            {/* Right Column */}
+            <div className="space-y-6">
+              <div className="bg-base-100 rounded-2xl shadow-lg p-6">
+                <h2 className="text-xl font-semibold flex items-center gap-2 mb-4">
+                  <User size={20} /> Profile Details
+                </h2>
+                <div className="space-y-4 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-2 font-medium text-base-content/70">
+                      <Mail size={16} /> Email
+                    </span>
+                    <span className="font-mono">
+                      {showPrivateInfo ? user.email : "••••••••••"}
+                    </span>
                   </div>
-                  {showPrivateInfo ? (
-                    <span className="text-base-content">{user.email}</span>
-                  ) : (
-                    <span className="text-base-content/60">Hidden</span>
-                  )}
+                  <button
+                    onClick={() => setShowPrivateInfo(!showPrivateInfo)}
+                    className="btn btn-outline btn-sm w-full mt-4"
+                  >
+                    {showPrivateInfo ? "Hide" : "Show"} Email
+                  </button>
                 </div>
+              </div>
 
-                {/* Phone */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <svg className="w-5 h-5 text-base-content/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
-                    </svg>
-                    <span className="text-base-content/80">Phone</span>
-                  </div>
-                  <span className="text-base-content/60">Hidden</span>
+              <div className="bg-base-100 rounded-2xl shadow-lg p-6">
+                <h2 className="text-xl font-semibold flex items-center gap-2 mb-4">
+                  <Settings size={20} /> Settings
+                </h2>
+                <div className="form-control">
+                  <label className="label cursor-pointer">
+                    <span className="label-text">
+                      {theme === "dark" ? "Dark Mode" : "Light Mode"}
+                    </span>
+                    <input
+                      type="checkbox"
+                      className="toggle toggle-primary"
+                      checked={theme === "dark"}
+                      onChange={handleThemeChange}
+                    />
+                  </label>
                 </div>
+              </div>
+            </div>
+          </motion.div>
 
-                {/* Location */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <svg className="w-5 h-5 text-base-content/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                    </svg>
-                    <span className="text-base-content/80">Location</span>
-                  </div>
-                  <span className="text-base-content">Unknown</span>
-                </div>
+          {/* --- Friends Dropdown --- */}
+          <motion.div
+            variants={itemVariants}
+            className="mt-10 bg-base-100 rounded-2xl shadow-lg overflow-hidden"
+          >
+            <button
+              onClick={() => setShowFriends((prev) => !prev)}
+              className="w-full flex items-center justify-between px-6 py-5 text-xl font-semibold hover:bg-base-200 transition"
+            >
+              <span>Friends List</span>
+              {showFriends ? <ChevronUp /> : <ChevronDown />}
+            </button>
 
-                <button
-                  onClick={() => setShowPrivateInfo(!showPrivateInfo)}
-                  className="btn btn-outline btn-sm w-full mt-4"
+            <AnimatePresence>
+              {showFriends && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="px-6 pb-6 space-y-3 overflow-hidden"
                 >
-                  {showPrivateInfo ? "Hide" : "Show"} Private Info
-                </button>
-              </div>
-            </div>
-
-            {/* Account Detail */}
-            <div className="bg-base-100 rounded-2xl px-8 py-8">
-              <h2 className="text-2xl font-semibold mb-6 flex items-center gap-2">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                Account Details
-              </h2>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-base-content/80">Member Since</span>
-                  <span className="text-base-content">Jan 15, 2024</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+                  {friendsList.length > 0 ? (
+                    friendsList.map((friend, i) => (
+                      <div
+                        key={friend._id}
+                        className="flex items-center justify-between bg-base-200 rounded-xl px-4 py-3 hover:bg-base-300 transition"
+                      >
+                        <div>
+                          <p className="font-semibold">
+                            {i + 1}. {friend.name}
+                          </p>
+                          <p className="text-xs opacity-70">
+                            Friends since{" "}
+                            {new Date(friend.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => handleStartChat(friend._id)}
+                        >
+                          Chat
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-center opacity-70 py-4">
+                      No friends yet — add some!
+                    </p>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        </motion.div>
       </div>
+      <ToastContainer position="bottom-right" theme="dark" />
     </div>
   );
 };
 
-export default Profile;
+export default UnifiedDashboard;

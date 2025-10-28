@@ -7,100 +7,64 @@ export const setSocketServer = (serverIO) => {
   io = serverIO;
 };
 
-// 1. Send message
+// 1. Send message (UPDATED to handle files)
 export const sendMessage = asyncHandler(async (req, res) => {
-  const { content, chatId } = req.body;
+  // ✅ 1. Destructure the 'file' object from the request body
+  const { content, chatId, file } = req.body;
 
-  console.log("🚀 sendMessage called:", {
-    content: content ? `"${content.substring(0, 50)}..."` : 'UNDEFINED',
-    chatId,
-    userId: req.user?.id, // ✅ Fixed: use req.user.id not req.user._id
-    hasIO: !!io
-  });
-
-  if (!content || !chatId) {
-    console.log("Invalid data passed into request");
+  // ✅ 2. Update validation: A message must have content OR a file
+  if ((!content || content.trim() === "") && !file) {
+    console.log("Invalid data: No content or file provided");
+    return res.sendStatus(400);
+  }
+  
+  if (!chatId) {
+    console.log("Invalid data: No chatId provided");
     return res.sendStatus(400);
   }
 
-  // ✅ Check if chat exists before creating message
-  const chatExists = await Chat.findById(chatId);
-  if (!chatExists) {
-    console.error("❌ Chat not found:", chatId);
-    return res.status(404).json({ message: "Chat not found" });
-  }
-
-  console.log("✅ Chat found:", {
-    chatId: chatExists._id,
-    usersCount: chatExists.users?.length || 0
-  });
-
-  const newMessage = {
-    sender: req.user.id, // ✅ Fixed: use req.user.id not req.user._id
-    content,
+  const newMessageData = {
+    sender: req.user.id,
+    content: content || "", // Content can be empty if it's a file-only message
     chat: chatId,
   };
 
-  let message = await Message.create(newMessage);
+  if (file) {
+    newMessageData.file = {
+      url: file.url,
+      name: file.name,
+      mimeType: file.mimeType,
+    };
+  }
 
   try {
+    let message = await Message.create(newMessageData);
+
     message = await message.populate("sender", "name email profilePic");
     message = await message.populate({
       path: "chat",
       populate: { path: "users", select: "name email profilePic" },
     });
-  } catch (populateError) {
-    console.error("❌ Population error:", populateError);
-    return res.status(500).json({ message: "Failed to populate message data" });
-  }
 
-  // ✅ Debug message structure
-  console.log("🔍 Message after population:", {
-    messageId: message._id,
-    content: message.content,
-    sender: message.sender ? { id: message.sender._id, name: message.sender.name } : 'UNDEFINED',
-    chat: message.chat ? { id: message.chat._id, users: message.chat.users?.length || 0 } : 'UNDEFINED'
-  });
-
-  // ✅ Ensure chat exists and update latestMessage safely
-  if (message.chat) {
     await Chat.findByIdAndUpdate(chatId, { latestMessage: message });
-  }
 
-  // ✅ Broadcast new message via Socket.IO to chat room - with safe checks
-  if (io && message.chat && message.chat._id && message.sender) {
-    console.log("📨 Broadcasting message:", {
-      messageId: message._id,
-      content: message.content,
-      senderId: message.sender._id,
-      senderName: message.sender.name,
-      chatId: message.chat._id,
-      chatUsers: message.chat.users?.map(u => ({ id: u._id, name: u.name })) || []
-    });
+    if (io && message.chat && message.chat._id) {
+      io.to(message.chat._id.toString()).emit("message received", message);
+    }
     
-    // Test broadcast first
-    console.log("🔍 Testing room broadcast to:", message.chat._id.toString());
-    console.log("👥 Active rooms:", Array.from(io.sockets.adapter.rooms.keys()));
-    console.log("🎯 Room size:", io.sockets.adapter.rooms.get(message.chat._id.toString())?.size || 0);
-    
-    // Emit to the chat room so all users in that chat receive it
-    io.to(message.chat._id.toString()).emit("message received", message);
-    console.log("✅ Message broadcasted to chat room:", message.chat._id);
-  } else {
-    console.error("❌ Cannot broadcast message - missing data:", {
-      hasIO: !!io,
-      hasChat: !!message.chat,
-      hasChatId: !!(message.chat && message.chat._id),
-      hasSender: !!message.sender
-    });
-  }
+    res.json(message);
 
-  res.json(message);
+  } catch (error) {
+    res.status(400);
+    throw new Error(error.message);
+  }
 });
 
-// 2. Get all messages
 export const allMessages = asyncHandler(async (req, res) => {
-  const messages = await Message.find({ chat: req.params.chatId })
+  const messages = await Message.find({
+    chat: req.params.chatId,
+    deletedBy: { $ne: req.user.id }, // exclude your deleted ones
+  })
     .populate("sender", "name email profilePic")
     .populate({
       path: "chat",
@@ -108,4 +72,64 @@ export const allMessages = asyncHandler(async (req, res) => {
     });
 
   res.json(messages);
+});
+
+// 3. Delete a Message
+export const deleteMessage = asyncHandler(async (req, res) => {
+  const messageId = req.params.id;
+  const userId = req.user.id;
+
+  if (!messageId) {
+    return res.status(400).json({ message: "Message ID is required" });
+  }
+
+  try {
+    const message = await Message.findById(messageId).populate("chat", "users");
+
+    if (!message) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    // ✅ Only allow the sender to delete their message
+    if (message.sender.toString() !== userId.toString()) {
+      return res.status(403).json({ message: "Not authorized to delete this message" });
+    }
+
+    await Message.findByIdAndDelete(messageId);
+
+    // ✅ Update chat.latestMessage if necessary
+    const lastMsg = await Message.findOne({ chat: message.chat._id })
+      .sort({ createdAt: -1 })
+      .populate("sender", "name email profilePic");
+
+    await Chat.findByIdAndUpdate(message.chat._id, { latestMessage: lastMsg });
+
+    // ✅ Notify other users in that chat (via socket)
+    if (io && message.chat._id) {
+      io.to(message.chat._id.toString()).emit("message deleted", {
+        messageId,
+        chatId: message.chat._id.toString(),
+      });
+    }
+
+    return res.status(200).json({ success: true, message: "Message deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting message:", error);
+    return res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+export const softDeleteMessage = asyncHandler(async (req, res) => {
+  const messageId = req.params.messageId;
+  const userId = req.user.id;
+
+  const message = await Message.findById(messageId);
+  if (!message) return res.status(404).json({ message: "Message not found" });
+
+  if (!message.deletedBy.includes(userId)) {
+    message.deletedBy.push(userId);
+    await message.save();
+  }
+
+  res.status(200).json({ success: true, message: "Message deleted for you" });
 });

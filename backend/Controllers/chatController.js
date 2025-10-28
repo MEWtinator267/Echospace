@@ -59,7 +59,8 @@ export const accessChat = asyncHandler(async (req, res) => {
 export const fetchChats = asyncHandler(async (req, res) => {
   try {
     let chats = await Chat.find({
-      users: { $elemMatch: { $eq: req.user.id } }, // ✅ Fixed: use req.user.id
+    users: { $elemMatch: { $eq: req.user.id } },
+    deletedBy: { $ne: req.user.id },
     })
       .populate("users", "-password")
       .populate("groupAdmin", "-password")
@@ -186,4 +187,62 @@ export const removeFromGroup = asyncHandler(async (req, res) => {
       .status(500)
       .json({ message: "Server Error", error: err.message });
   }
+});
+
+// 7. Delete a Chat (and its messages)
+export const deleteChat = asyncHandler(async (req, res) => {
+  const chatId = req.params.id;
+  const userId = req.user.id;
+
+  if (!chatId) {
+    return res.status(400).json({ message: "Chat ID is required" });
+  }
+
+  try {
+    const chat = await Chat.findById(chatId).populate("users", "_id name");
+
+    if (!chat) {
+      return res.status(404).json({ message: "Chat not found" });
+    }
+
+    // ✅ Only allow users part of the chat (or group admin) to delete
+    const isAuthorized =
+      chat.users.some((u) => u._id.toString() === userId.toString()) ||
+      (chat.isGroupChat && chat.groupAdmin?.toString() === userId.toString());
+
+    if (!isAuthorized) {
+      return res.status(403).json({ message: "Not authorized to delete this chat" });
+    }
+
+    // ✅ Delete all messages associated with the chat
+    await Message.deleteMany({ chat: chatId });
+
+    // ✅ Delete the chat itself
+    await Chat.findByIdAndDelete(chatId);
+
+    // ✅ Emit socket event so other users remove it live
+    if (io) {
+      io.to(chatId.toString()).emit("chat deleted", { chatId });
+    }
+
+    return res.status(200).json({ success: true, message: "Chat deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting chat:", error);
+    return res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+export const softDeleteChat = asyncHandler(async (req, res) => {
+const chatId = req.params.chatId;
+const userId = req.user.id;
+
+  const chat = await Chat.findById(chatId);
+  if (!chat) return res.status(404).json({ message: "Chat not found" });
+
+  if (!chat.deletedBy.includes(userId)) {
+    chat.deletedBy.push(userId);
+    await chat.save();
+  }
+
+  res.status(200).json({ success: true, message: "Chat hidden for you" });
 });
