@@ -17,6 +17,7 @@
     "daisyui": "^5.0.47",
     "emoji-picker-react": "^4.13.3",
     "framer-motion": "^12.23.12",
+    "lenis": "^1.3.13",
     "lucide-react": "^0.539.0",
     "nodemon": "^3.1.10",
     "react": "^19.1.0",

@@ -9,7 +9,6 @@ import Signup from './pages/Signup.jsx';
 import Features from './pages/Features.jsx';
 import About from './pages/About.jsx';
 import HF2 from './Layout/HF2.jsx';
-import Homepage2 from './pages/User.jsx';
 import Profile from './pages/Profile.jsx';
 import { HF3 } from './Layout/HF3.jsx';
 import ChatPage from './pages/Chatpage.jsx';

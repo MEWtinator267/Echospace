@@ -127,6 +127,20 @@ const UnifiedDashboard = () => {
     }
   };
 
+  const handleRemoveFriend = async (friendId) => {
+    try {
+      await axios.delete(`/api/friends/remove/${friendId}`, {
+        headers: { Authorization: `Bearer ${user.token}` },
+      });
+      toast.success("Friend removed successfully.");
+      setFriendsList((prev) => prev.filter((f) => f._id !== friendId));
+      setTotalFriends((prev) => prev - 1);
+    } catch (err) {
+      toast.error("Failed to remove friend.");
+      console.error("Remove friend error:", err);
+    }
+  };
+
   // --- Animations ---
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -336,12 +350,20 @@ const UnifiedDashboard = () => {
                             {new Date(friend.createdAt).toLocaleDateString()}
                           </p>
                         </div>
-                        <button
-                          className="btn btn-primary btn-sm"
-                          onClick={() => handleStartChat(friend._id)}
-                        >
-                          Chat
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            className="btn btn-primary btn-sm"
+                            onClick={() => handleStartChat(friend._id)}
+                          >
+                            Chat
+                          </button>
+                          <button
+                            className="btn btn-error btn-sm"
+                            onClick={() => handleRemoveFriend(friend._id)}
+                          >
+                            Remove
+                          </button>
+                        </div>
                       </div>
                     ))
                   ) : (

@@ -393,6 +393,7 @@ export default function ChatPage() {
 
   const [chatView, setChatView] = useState("chats");
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+  const [isGroupControlOpen, setIsGroupControlOpen] = useState(false);
   const [confirmation, setConfirmation] = useState({ isOpen: false, title: "", message: "", onConfirm: () => {} });
 
   const { theme, toggleTheme } = useTheme();
@@ -623,6 +624,32 @@ const deleteChat = (chatId) => {
 };
 
 
+  const handleGroupUpdate = async (updatedData) => {
+    try {
+      const { data } = await axios.put(`${ENDPOINT}/api/chat/group/${selectedChat._id}`, updatedData, {
+        headers: { Authorization: `Bearer ${user.token}` },
+      });
+      setSelectedChat(data);
+      setChats((prev) => prev.map((c) => (c._id === data._id ? data : c)));
+      setIsGroupControlOpen(false);
+    } catch (err) {
+      console.error("Error updating group:", err);
+    }
+  };
+
+  const handleGroupLeave = async () => {
+    try {
+      await axios.put(`${ENDPOINT}/api/chat/group/leave/${selectedChat._id}`, {}, {
+        headers: { Authorization: `Bearer ${user.token}` },
+      });
+      setChats((prev) => prev.filter((c) => c._id !== selectedChat._id));
+      setSelectedChat(null);
+      setIsGroupControlOpen(false);
+    } catch (err) {
+      console.error("Error leaving group:", err);
+    }
+  };
+
   const createGroupChat = async ({ name, users }) => {
     try {
       const { data } = await axios.post(`${ENDPOINT}/api/chat/group`, { name, users: JSON.stringify(users) }, { headers: { Authorization: `Bearer ${user.token}` } });
@@ -671,8 +698,200 @@ const deleteChat = (chatId) => {
   const isChatSelected = !!selectedChat;
   const other = isChatSelected && !selectedChat.isGroupChat ? otherUserFromChat(selectedChat) : null;
   const chatDisplayName = isChatSelected ? (selectedChat.isGroupChat ? selectedChat.chatName : other?.name) : "Select Chat";
-  const chatDisplayPic = isChatSelected ? (selectedChat.isGroupChat ? "/group-avatar.png" : other?.profilePic) : "/default-avatar.png";
+  const chatDisplayPic = isChatSelected ? (selectedChat.isGroupChat ? (selectedChat.profilePic || "/group-avatar.png") : other?.profilePic) : "/default-avatar.png";
   const filteredChats = chats.filter((chat) => chatView === "groups" ? chat.isGroupChat : !chat.isGroupChat);
+
+  // GroupControlModal definition
+  const GroupControlModal = ({
+    isOpen,
+    onClose,
+    group,
+    friends,
+    onUpdate,
+    onLeave,
+  }) => {
+    const [name, setName] = useState(group?.chatName || "");
+    const [profilePic, setProfilePic] = useState(group?.profilePic || "/group-avatar.png");
+    const [profilePicFile, setProfilePicFile] = useState(null);
+    const [members, setMembers] = useState(group?.users || []);
+    const [removing, setRemoving] = useState({});
+    const [adding, setAdding] = useState({});
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+      if (isOpen) {
+        setName(group?.chatName || "");
+        setProfilePic(group?.profilePic || "/group-avatar.png");
+        setProfilePicFile(null);
+        setMembers(group?.users || []);
+        setRemoving({});
+        setAdding({});
+        setSaving(false);
+      }
+    }, [isOpen, group]);
+
+    const handleProfilePicChange = (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        setProfilePicFile(file);
+        const reader = new FileReader();
+        reader.onload = (ev) => setProfilePic(ev.target.result);
+        reader.readAsDataURL(file);
+      }
+    };
+
+    const handleRemoveMember = (userId) => {
+      setMembers((prev) => prev.filter((u) => u._id !== userId));
+      setRemoving((prev) => ({ ...prev, [userId]: true }));
+    };
+
+    const handleAddMember = (userObj) => {
+      setMembers((prev) => [...prev, userObj]);
+      setAdding((prev) => ({ ...prev, [userObj._id]: true }));
+    };
+
+    // Only show friends not already in group
+    const currentMemberIds = members.map((u) => u._id);
+    const addableFriends = friends.filter((f) => !currentMemberIds.includes(f._id));
+    const currentUserId = user?._id || user?.id;
+
+    const handleSave = async () => {
+      setSaving(true);
+      let uploadedPic = null;
+      if (profilePicFile) {
+        // Upload the new profile picture
+        const formData = new FormData();
+        formData.append("file", profilePicFile);
+        try {
+          const { data } = await axios.post(`${ENDPOINT}/api/upload/file`, formData, {
+            headers: { "Content-Type": "multipart/form-data", Authorization: `Bearer ${user.token}` },
+          });
+          if (data.success && data.file) {
+            uploadedPic = data.file.url;
+          }
+        } catch (err) {
+          alert("Failed to upload profile picture.");
+        }
+      }
+      // Prepare update payload
+      const updatePayload = {
+        name: name.trim(),
+        users: members.map((u) => u._id),
+      };
+      if (uploadedPic) {
+        updatePayload.profilePic = uploadedPic;
+      }
+      await onUpdate(updatePayload);
+      setSaving(false);
+    };
+
+    if (!isOpen) return null;
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="fixed inset-0 bg-black/80 flex items-center justify-center z-[99991] p-4"
+      >
+        <motion.div
+          initial={{ scale: 0.95, y: 10 }}
+          animate={{ scale: 1, y: 0 }}
+          exit={{ scale: 0.95, y: 10 }}
+          onClick={(e) => e.stopPropagation()}
+          className="bg-base-100 rounded-lg shadow-xl w-full max-w-lg p-6"
+        >
+          <h3 className="font-bold text-xl mb-4 flex items-center gap-2">
+            <Users size={22} /> Edit EchoZone
+          </h3>
+          <div className="flex gap-6 mb-6">
+            <div className="flex flex-col items-center">
+              <div className="avatar mb-2">
+                <div className="w-20 h-20 rounded-full border border-base-300">
+                  <img src={profilePic} alt="Group" className="object-cover w-full h-full" />
+                </div>
+              </div>
+              <label className="btn btn-xs btn-outline mt-1">
+                Change Picture
+                <input type="file" accept="image/*" className="hidden" onChange={handleProfilePicChange} />
+              </label>
+            </div>
+            <div className="flex-1">
+              <label className="label">
+                <span className="label-text">Group Name</span>
+              </label>
+              <input
+                type="text"
+                className="input input-bordered w-full"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="mb-4">
+            <p className="font-semibold mb-1">Members</p>
+            <div className="max-h-36 overflow-y-auto bg-base-200 rounded-lg p-2 space-y-1 scrollbar-thin">
+              {members.length > 0 ? members.map((member) => (
+                <div key={member._id} className="flex items-center gap-3 p-2 rounded hover:bg-base-300">
+                  <div className="avatar">
+                    <div className="w-8 h-8 rounded-full">
+                      <img src={member.profilePic || "/default-avatar.png"} alt={member.name} />
+                    </div>
+                  </div>
+                  <span className="flex-1 truncate">{member.name}</span>
+                  {member._id !== currentUserId && (
+                    <button
+                      className="btn btn-ghost btn-xs text-error"
+                      onClick={() => handleRemoveMember(member._id)}
+                      disabled={removing[member._id]}
+                    >
+                      Remove
+                    </button>
+                  )}
+                  {member._id === currentUserId && (
+                    <span className="text-xs opacity-60">(You)</span>
+                  )}
+                </div>
+              )) : (
+                <div className="text-xs text-center opacity-60 py-2">No members</div>
+              )}
+            </div>
+          </div>
+          <div className="mb-4">
+            <p className="font-semibold mb-1">Add Members</p>
+            <div className="max-h-24 overflow-y-auto bg-base-200 rounded-lg p-2 space-y-1 scrollbar-thin">
+              {addableFriends.length > 0 ? addableFriends.map((f) => (
+                <div key={f._id} className="flex items-center gap-3 p-2 rounded hover:bg-base-300">
+                  <div className="avatar">
+                    <div className="w-8 h-8 rounded-full">
+                      <img src={f.profilePic || "/default-avatar.png"} alt={f.name} />
+                    </div>
+                  </div>
+                  <span className="flex-1 truncate">{f.name}</span>
+                  <button
+                    className="btn btn-ghost btn-xs text-primary"
+                    onClick={() => handleAddMember(f)}
+                    disabled={adding[f._id]}
+                  >
+                    Add
+                  </button>
+                </div>
+              )) : (
+                <div className="text-xs text-center opacity-60 py-2">No friends to add.</div>
+              )}
+            </div>
+          </div>
+          <div className="modal-action mt-6 flex flex-wrap gap-3 justify-end">
+            <button onClick={onClose} className="btn btn-ghost">Close</button>
+            <button onClick={onLeave} className="btn btn-warning">Leave Group</button>
+            <button onClick={handleSave} className="btn btn-primary" disabled={saving}>
+              {saving ? "Saving..." : "Save Changes"}
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    );
+  };
 
   return (
     <>
@@ -688,11 +907,31 @@ const deleteChat = (chatId) => {
           </div>
 
           <div className="p-3 border-b border-base-200">
-            <div className="grid grid-cols-2 gap-2 p-1 bg-base-200 rounded-lg">
-              <button onClick={() => setChatView("chats")} className="relative px-4 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+            <div className="grid grid-cols-2 gap-2 p-1 bg-base-200 rounded-lg relative">
+              <button
+                onClick={() => setChatView("chats")}
+                className="relative px-4 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary overflow-hidden"
+              >
+                {chatView === "chats" && (
+                  <motion.div
+                    layoutId="activeTab"
+                    className="absolute inset-0 bg-primary rounded-md shadow-md z-0"
+                    transition={{ type: "spring", stiffness: 500, damping: 32 }}
+                  />
+                )}
                 <span className="relative z-10">Chats</span>
               </button>
-              <button onClick={() => setChatView("groups")} className="relative px-4 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+              <button
+                onClick={() => setChatView("groups")}
+                className="relative px-4 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary overflow-hidden"
+              >
+                {chatView === "groups" && (
+                  <motion.div
+                    layoutId="activeTab"
+                    className="absolute inset-0 bg-primary rounded-md shadow-md z-0"
+                    transition={{ type: "spring", stiffness: 500, damping: 32 }}
+                  />
+                )}
                 <span className="relative z-10">EchoZones</span>
               </button>
             </div>
@@ -703,7 +942,7 @@ const deleteChat = (chatId) => {
               filteredChats.map((chat) => {
                 const otherP = !chat.isGroupChat ? otherUserFromChat(chat) : null;
                 const name = chat.isGroupChat ? chat.chatName : otherP?.name;
-                const pic = chat.isGroupChat ? "/group-avatar.png" : otherP?.profilePic;
+                const pic = chat.isGroupChat ? (chat.profilePic || "/group-avatar.png") : otherP?.profilePic;
                 const isActive = selectedChat?._id === chat._id;
 
                 return (
@@ -764,7 +1003,11 @@ const deleteChat = (chatId) => {
                   <div className="flex gap-1">
                     <button className="btn btn-ghost btn-circle"><Phone size={20} /></button>
                     <button className="btn btn-ghost btn-circle"><Video size={20} /></button>
-                    <button className="btn btn-ghost btn-circle"><Info size={20} /></button>
+                    {selectedChat.isGroupChat && (
+                      <button onClick={() => setIsGroupControlOpen(true)} className="btn btn-ghost btn-circle">
+                        <Info size={20} />
+                      </button>
+                    )}
                     <Menu as="div" className="relative">
                       <Menu.Button className="btn btn-ghost btn-circle"><MoreVertical size={20} /></Menu.Button>
                       <Transition as={React.Fragment} enter="transition ease-out duration-100" enterFrom="transform opacity-0 scale-95" enterTo="transform opacity-100 scale-100" leave="transition ease-in duration-75" leaveFrom="transform opacity-100 scale-100" leaveTo="transform opacity-0 scale-95">
@@ -873,13 +1116,26 @@ const deleteChat = (chatId) => {
       </AnimatePresence>
 
       <AnimatePresence>
-  {confirmation.isOpen && (
-    <ConfirmationModal
-      {...confirmation}
-      onClose={handleCloseConfirmation}
-    />
-  )}
-</AnimatePresence>
+        {isGroupControlOpen && (
+          <GroupControlModal
+            isOpen={isGroupControlOpen}
+            onClose={() => setIsGroupControlOpen(false)}
+            group={selectedChat}
+            friends={friends}
+            onUpdate={handleGroupUpdate}
+            onLeave={handleGroupLeave}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {confirmation.isOpen && (
+          <ConfirmationModal
+            {...confirmation}
+            onClose={handleCloseConfirmation}
+          />
+        )}
+      </AnimatePresence>
 
     </>
   );

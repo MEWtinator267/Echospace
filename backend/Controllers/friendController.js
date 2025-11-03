@@ -3,6 +3,7 @@ import User from "../models/users.js";
 import Notification from '../models/notification.js';
 import { use } from "react";
 import AllUser from '../models/users.js'
+import asyncHandler from "express-async-handler";
 
 // Send friend request
 export const sendFriendRequest = async (req, res) => {
@@ -228,3 +229,56 @@ export const getFriendsList = async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 };
+
+export const removeFriend = asyncHandler(async (req, res) => {
+  try {
+    const userId = req.user?._id || req.user?.id;
+    const friendId = req.params.friendId;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "User not authenticated" });
+    }
+
+    // validate ids
+    if (!mongoose.Types.ObjectId.isValid(friendId)) {
+      return res.status(400).json({ success: false, message: "Invalid friend id" });
+    }
+
+    if (userId.toString() === friendId.toString()) {
+      return res.status(400).json({ success: false, message: "You cannot remove yourself" });
+    }
+
+    const user = await User.findById(userId);
+    const friend = await User.findById(friendId);
+
+    if (!user || !friend) {
+      return res.status(404).json({ success: false, message: "User or friend not found" });
+    }
+
+    // Remove friendId from user's friends array
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $pull: { friends: friendId } },
+      { new: true }
+    ).select("-password");
+
+    // Remove userId from friend's friends array
+    await User.findByIdAndUpdate(
+      friendId,
+      { $pull: { friends: userId } },
+      { new: true }
+    );
+
+    // Optionally return updated friends list to frontend
+    const populated = await User.findById(updatedUser._id).populate("friends", "name profilePic _id");
+
+    res.json({
+      success: true,
+      message: "Friend removed successfully",
+      friends: populated.friends || [],
+    });
+  } catch (error) {
+    console.error("Error in removeFriend:", error);
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+});

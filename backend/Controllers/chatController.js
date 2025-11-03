@@ -246,3 +246,93 @@ const userId = req.user.id;
 
   res.status(200).json({ success: true, message: "Chat hidden for you" });
 });
+
+// Update group (name, picture, and members)
+export const updateGroup = asyncHandler(async (req, res) => {
+  const { chatId } = req.params;
+  const { name, users, profilePic } = req.body;
+  const userId = req.user.id;
+
+  try {
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+      return res.status(404).json({ message: "Group not found" });
+    }
+
+    // ✅ Only group admin or members can update
+    if (!chat.users.includes(userId)) {
+      return res.status(403).json({ message: "Not a member of this group" });
+    }
+
+    // Update group name if provided
+    if (name) {
+      chat.chatName = name;
+    }
+
+    // Update profile picture if provided
+    if (profilePic) {
+      chat.profilePic = profilePic;
+    }
+
+    // Update members if provided
+    if (users && Array.isArray(users)) {
+      chat.users = users;
+    }
+
+    await chat.save();
+
+    const updatedChat = await Chat.findById(chatId)
+      .populate("users", "-password")
+      .populate("groupAdmin", "-password");
+
+    return res.status(200).json(updatedChat);
+  } catch (err) {
+    console.error("Error in updateGroup:", err);
+    return res
+      .status(500)
+      .json({ message: "Server Error", error: err.message });
+  }
+});
+
+// Leave a group
+export const leaveGroup = asyncHandler(async (req, res) => {
+  const { chatId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+      return res.status(404).json({ message: "Group not found" });
+    }
+
+    // ✅ Check if user is in the group
+    if (!chat.users.includes(userId)) {
+      return res.status(400).json({ message: "You are not a member of this group" });
+    }
+
+    // Remove user from the group
+    chat.users = chat.users.filter((u) => u.toString() !== userId.toString());
+
+    // If user is admin and no one else is admin, assign first remaining user as admin
+    if (chat.groupAdmin?.toString() === userId.toString() && chat.users.length > 0) {
+      chat.groupAdmin = chat.users[0];
+    }
+
+    await chat.save();
+
+    const updatedChat = await Chat.findById(chatId)
+      .populate("users", "-password")
+      .populate("groupAdmin", "-password");
+
+    return res.status(200).json({
+      success: true,
+      message: "You have left the group",
+      chat: updatedChat,
+    });
+  } catch (err) {
+    console.error("Error in leaveGroup:", err);
+    return res
+      .status(500)
+      .json({ message: "Server Error", error: err.message });
+  }
+});
