@@ -3,6 +3,8 @@ import ThemeContext from './ThemeContext';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 
+const ENDPOINT = "https://echospace-backend-z188.onrender.com";
+
 function HeaderLoggedIn() {
   const { theme, toggleTheme } = useContext(ThemeContext);
   const navigate = useNavigate();
@@ -11,7 +13,7 @@ function HeaderLoggedIn() {
 
   const fetchNotifications = async () => {
     try {
-      const { data } = await axios.get(`/api/notifications`, {
+      const { data } = await axios.get(`${ENDPOINT}/api/notifications`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       setNotifications(data.notifications || []);
@@ -24,7 +26,7 @@ function HeaderLoggedIn() {
   const acceptFriendRequest = async (notificationId, requesterId) => {
     try {
       await axios.post(
-        `/api/friends/accept`,
+        `${ENDPOINT}/api/friends/accept`,
         { requesterId },
         { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
       );
@@ -39,7 +41,7 @@ function HeaderLoggedIn() {
   const rejectFriendRequest = async (notificationId, senderId) => {
     try {
       await axios.post(
-        `/api/friends/reject`,
+        `${ENDPOINT}/api/friends/reject`,
         { senderId },
         { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
       );

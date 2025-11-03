@@ -45,10 +45,10 @@ const UnifiedDashboard = () => {
       if (!user?.token) return;
       try {
         const [countRes, listRes] = await Promise.all([
-          axios.get("/api/friends/count", {
+          axios.get(`${ENDPOINT}/api/friends/count`, {
             headers: { Authorization: `Bearer ${user.token}` },
           }),
-          axios.get("/api/friends/list", {
+          axios.get(`${ENDPOINT}/api/friends/list`, {
             headers: { Authorization: `Bearer ${user.token}` },
           }),
         ]);
