@@ -25,7 +25,7 @@ import Picker from "emoji-picker-react";
 import { Menu, Transition } from "@headlessui/react";
 import { useTheme } from "../components/ThemeContext.jsx"; // Make sure this path is correct
 
-const ENDPOINT = "http://localhost:8000";
+const ENDPOINT = "https://echospace-backend-z188.onrender.com";
 
 // -----------------------------
 // ConfirmationModal (top-level, high z-index)

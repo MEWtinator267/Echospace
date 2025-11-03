@@ -21,7 +21,7 @@ function Signup() {
     return handleerror(`All fields are required`)
   }
   try {
-    const URL = 'http://localhost:8000/auth/signup'
+    const URL = 'https://echospace-backend-z188.onrender.com/auth/signup'
     const Response = await fetch(URL,{
       method:"POST",
       headers:{

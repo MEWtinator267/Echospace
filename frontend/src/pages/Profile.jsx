@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-const ENDPOINT = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const ENDPOINT = import.meta.env.VITE_API_URL || "https://echospace-backend-z188.onrender.com";
 
 const UnifiedDashboard = () => {
   const navigate = useNavigate();

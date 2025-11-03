@@ -20,7 +20,7 @@ function Login() {
     }
 
     try {
-      const URL = 'http://localhost:8000/auth/login';
+      const URL = 'https://echospace-backend-z188.onrender.com/auth/login';
       const Response = await fetch(URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
