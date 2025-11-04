@@ -41,7 +41,7 @@ const server = http.createServer(app);
 const io = new Server(server, {
   pingTimeout: 60000,
   cors: {
-    origin: ["http://localhost:5173", "http://localhost:5174", "http://localhost:4173", "http://localhost:3000", process.env.FRONTEND_URL || "https://echospace.netlify.app"], // ✅ Allow all dev and deployed frontend URLs
+    origin: ["http://localhost:5173", "http://localhost:5174", "http://localhost:4173", "http://localhost:3000", "https://echospace-frontend.onrender.com"], // ✅ Allow localhost dev and deployed frontend
     methods: ["GET", "POST"],
     credentials: true,
   },
