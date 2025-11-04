@@ -61,6 +61,13 @@ function HeaderLoggedIn() {
 
   useEffect(() => {
     fetchNotifications();
+    
+    // Poll for new notifications every 5 seconds
+    const interval = setInterval(() => {
+      fetchNotifications();
+    }, 5000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   return (
