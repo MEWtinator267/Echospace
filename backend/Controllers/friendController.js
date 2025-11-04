@@ -11,7 +11,14 @@ export const sendFriendRequest = async (req, res) => {
     const { targetUserId } = req.body;
     const currentUserId = req.user.id;
 
+    console.log("📤 sendFriendRequest endpoint called:", {
+      targetUserId,
+      currentUserId,
+      timestamp: new Date().toISOString(),
+    });
+
     if (!targetUserId || !currentUserId) {
+      console.warn("⚠️ Missing user IDs:", { targetUserId, currentUserId });
       return res.status(400).json({ message: "Missing user IDs" });
     }
 
@@ -22,32 +29,44 @@ export const sendFriendRequest = async (req, res) => {
 
     // Validate ObjectIds
     if (!mongoose.Types.ObjectId.isValid(trimmedTargetUserId)) {
+      console.warn("⚠️ Invalid target user ID format");
       return res.status(400).json({ message: "Invalid target user ID" });
     }
     if (!mongoose.Types.ObjectId.isValid(trimmedCurrentUserId)) {
+      console.warn("⚠️ Invalid current user ID format");
       return res.status(400).json({ message: "Invalid current user ID" });
     }
 
     if (trimmedCurrentUserId === trimmedTargetUserId) {
+      console.warn("⚠️ User trying to send request to themselves");
       return res.status(400).json({ message: "You can't send request to yourself" });
     }
 
     const targetUser = await User.findById(trimmedTargetUserId);
     const currentUser = await User.findById(trimmedCurrentUserId);
 
-    if (!targetUser) return res.status(404).json({ message: "Target user not found" });
-    if (!currentUser) return res.status(404).json({ message: "Current user not found" });
+    if (!targetUser) {
+      console.warn("⚠️ Target user not found:", trimmedTargetUserId);
+      return res.status(404).json({ message: "Target user not found" });
+    }
+    if (!currentUser) {
+      console.warn("⚠️ Current user not found:", trimmedCurrentUserId);
+      return res.status(404).json({ message: "Current user not found" });
+    }
 
     if (targetUser.friendRequests.includes(trimmedCurrentUserId)) {
+      console.warn("⚠️ Request already sent");
       return res.status(400).json({ message: "Request already sent" });
     }
 
     if (targetUser.friends.includes(trimmedCurrentUserId)) {
+      console.warn("⚠️ Already friends");
       return res.status(400).json({ message: "Already friends" });
     }
 
     targetUser.friendRequests.push(trimmedCurrentUserId);
     await targetUser.save();
+    console.log("✅ Friend request added to user's friendRequests array");
 
     const notification = await Notification.create({
       type: 'friend_request',
@@ -59,12 +78,13 @@ export const sendFriendRequest = async (req, res) => {
       notificationId: notification._id,
       type: notification.type,
       sender: trimmedCurrentUserId,
-      receiver: trimmedTargetUserId 
+      receiver: trimmedTargetUserId,
+      timestamp: new Date().toISOString(),
     });
 
     res.status(200).json({ message: "Friend request sent!" });
   } catch (err) {
-    console.error("sendFriendRequest error:", err);
+    console.error("❌ sendFriendRequest error:", err);
     res.status(500).json({ message: err.message });
   }
 };

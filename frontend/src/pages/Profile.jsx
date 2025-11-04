@@ -65,20 +65,24 @@ const UnifiedDashboard = () => {
   const handleAddFriend = async () => {
     if (!searchValue.trim()) return;
     try {
-      const { data } = await axios.get(`/api/friends/search?query=${searchValue}`, {
+      const { data } = await axios.get(`${ENDPOINT}/api/friends/search?query=${searchValue}`, {
         headers: { Authorization: `Bearer ${user.token}` },
       });
       if (data.length === 0) return toast.warn("User not found.");
       const foundUser = data[0];
       if (foundUser._id === (user.id || user._id)) return toast.info("You cannot add yourself.");
-      await axios.post(
-        "/api/friends/send",
+      
+      console.log("📤 Sending friend request to:", foundUser._id);
+      const response = await axios.post(
+        `${ENDPOINT}/api/friends/send`,
         { targetUserId: foundUser._id },
         { headers: { Authorization: `Bearer ${user.token}` } }
       );
+      console.log("✅ Friend request sent:", response.data);
       toast.success(`Friend request sent to ${foundUser.name}`);
       setSearchValue("");
     } catch (err) {
+      console.error("❌ Error sending friend request:", err.response?.data || err.message);
       toast.error(err.response?.data?.message || "Error sending friend request.");
     }
   };
@@ -116,28 +120,29 @@ const UnifiedDashboard = () => {
   const handleStartChat = async (friendId) => {
     try {
       const { data } = await axios.post(
-        "/api/chat",
+        `${ENDPOINT}/api/chat`,
         { userId: friendId },
         { headers: { Authorization: `Bearer ${user.token}` } }
       );
       localStorage.setItem("selectedChatId", data._id);
       navigate("/user/chat");
     } catch (err) {
+      console.error("❌ Error starting chat:", err.response?.data || err.message);
       toast.error("Failed to start chat.");
     }
   };
 
   const handleRemoveFriend = async (friendId) => {
     try {
-      await axios.delete(`/api/friends/remove/${friendId}`, {
+      await axios.delete(`${ENDPOINT}/api/friends/remove/${friendId}`, {
         headers: { Authorization: `Bearer ${user.token}` },
       });
       toast.success("Friend removed successfully.");
       setFriendsList((prev) => prev.filter((f) => f._id !== friendId));
       setTotalFriends((prev) => prev - 1);
     } catch (err) {
+      console.error("❌ Remove friend error:", err.response?.data || err.message);
       toast.error("Failed to remove friend.");
-      console.error("Remove friend error:", err);
     }
   };
 
