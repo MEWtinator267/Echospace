@@ -437,11 +437,11 @@ export default function ChatPage() {
 
     const onMessageReceived = (newMsgReceived) => {
       if (!newMsgReceived || !newMsgReceived.chat) return;
-      const senderId = newMsgReceived.sender?._id || newMsgReceived.sender?.id || newMsgReceived.sender;
-      if (!senderId) return;
+      
+      // Check if this message is for the currently open chat
       if (!selectedChatCompareRef.current || selectedChatCompareRef.current._id !== newMsgReceived.chat._id) return;
-      const currentUserId = user?._id || user?.id;
-      if (senderId === currentUserId) return;
+      
+      // Add message to state (works for both received and sent messages)
       setMessages((prev) => {
         const messageExists = prev.some((msg) => msg.id === newMsgReceived._id);
         if (messageExists) return prev;
@@ -456,7 +456,14 @@ export default function ChatPage() {
     socketRef.current.on("typing", onTyping);
     socketRef.current.on("stop typing", onStopTyping);
 
-    return () => { if (socketRef.current) socketRef.current.disconnect(); };
+    return () => { 
+      if (socketRef.current) {
+        socketRef.current.off("message received", onMessageReceived);
+        socketRef.current.off("typing", onTyping);
+        socketRef.current.off("stop typing", onStopTyping);
+        socketRef.current.disconnect();
+      }
+    };
   }, [user, mapServerMsgToUI, selectedChat]);
 
   useEffect(() => {
