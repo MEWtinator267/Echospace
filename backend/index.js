@@ -41,7 +41,7 @@ const server = http.createServer(app);
 const io = new Server(server, {
   pingTimeout: 60000,
   cors: {
-    origin: ["http://localhost:5173", "http://localhost:5174", "http://localhost:4173"], // ✅ Allow all dev and preview ports
+    origin: ["http://localhost:5173", "http://localhost:5174", "http://localhost:4173", "http://localhost:3000", process.env.FRONTEND_URL || "https://echospace.netlify.app"], // ✅ Allow all dev and deployed frontend URLs
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -56,13 +56,13 @@ io.on("connection", (socket) => {
     if (!userData?._id) return;
     socket.join(userData._id);
     socket.emit("connected");
-    console.log("User joined personal room:", userData._id);
+    console.log("👤 User joined personal room:", userData._id, "| Socket ID:", socket.id);
   });
 
   socket.on("join chat", (roomId) => {
     socket.join(roomId);
-    console.log("📌 User joined chat room:", roomId);
-    console.log("Current room members:", io.sockets.adapter.rooms.get(roomId)?.size || 0);
+    console.log("📌 Socket", socket.id, "joined chat room:", roomId);
+    console.log("   Room members count:", io.sockets.adapter.rooms.get(roomId)?.size || 0);
   });
 
   socket.on("typing", (room) => {
@@ -76,7 +76,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    console.log("❌ User disconnected:", socket.id);
+    console.log("❌ Socket disconnected:", socket.id);
   });
 
   // ✅ Handle message deletion event

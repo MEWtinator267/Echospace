@@ -426,14 +426,32 @@ export default function ChatPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // ✅ SETUP SOCKET CONNECTION (only once)
   useEffect(() => {
     const userId = user?._id || user?.id;
     if (!user || !userId) return;
 
-    socketRef.current = io(ENDPOINT, { withCredentials: true, reconnection: true, reconnectionDelay: 1000, reconnectionAttempts: 5, timeout: 20000 });
+    socketRef.current = io(ENDPOINT, { 
+      withCredentials: true, 
+      reconnection: true, 
+      reconnectionDelay: 1000, 
+      reconnectionAttempts: 5, 
+      timeout: 20000 
+    });
 
     socketRef.current.emit("setup", user);
     socketRef.current.on("connect", () => console.log("✅ Socket connected:", socketRef.current.id));
+
+    return () => { 
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, [user]);
+
+  // ✅ SETUP MESSAGE LISTENER (only once, uses ref so doesn't re-create)
+  useEffect(() => {
+    if (!socketRef.current) return;
 
     const onMessageReceived = (newMsgReceived) => {
       console.log("📨 Message received event:", newMsgReceived);
@@ -443,49 +461,59 @@ export default function ChatPage() {
         return;
       }
       
-      // Get the current chat ID
       const currentChatId = selectedChatCompareRef.current?._id;
       const messageChatId = newMsgReceived.chat?._id || newMsgReceived.chat;
       
       console.log("Current chat:", currentChatId, "Message chat:", messageChatId);
       
-      // Check if this message is for the currently open chat
       if (!currentChatId || currentChatId.toString() !== messageChatId.toString()) {
         console.log("Message is not for current chat, ignoring");
         return;
       }
       
-      console.log("✅ Adding message to current chat");
+      console.log("✅ Message is for current chat, adding to state");
       
-      // Add message to state (works for both received and sent messages)
       setMessages((prev) => {
         const messageExists = prev.some((msg) => msg.id === newMsgReceived._id);
         if (messageExists) {
-          console.log("Message already exists, skipping");
+          console.log("Message already exists, skipping duplicate");
           return prev;
         }
         const mappedMsg = mapServerMsgToUI(newMsgReceived);
-        console.log("Mapped message:", mappedMsg);
+        console.log("Adding message:", mappedMsg);
         return [...prev, mappedMsg];
       });
     };
 
-    const onTyping = (chatId) => { if (selectedChat && selectedChat._id === chatId) setOtherTyping(true); };
-    const onStopTyping = (chatId) => { if (selectedChat && selectedChat._id === chatId) setOtherTyping(false); };
-
     socketRef.current.on("message received", onMessageReceived);
+
+    return () => { 
+      socketRef.current?.off("message received", onMessageReceived);
+    };
+  }, [mapServerMsgToUI]);
+
+  // ✅ SETUP TYPING LISTENERS (separate from message listener)
+  useEffect(() => {
+    if (!socketRef.current) return;
+
+    const onTyping = (chatId) => {
+      console.log("User typing in:", chatId);
+      if (selectedChat && selectedChat._id === chatId) setOtherTyping(true);
+    };
+    
+    const onStopTyping = (chatId) => {
+      console.log("User stopped typing in:", chatId);
+      if (selectedChat && selectedChat._id === chatId) setOtherTyping(false);
+    };
+
     socketRef.current.on("typing", onTyping);
     socketRef.current.on("stop typing", onStopTyping);
 
-    return () => { 
-      if (socketRef.current) {
-        socketRef.current.off("message received", onMessageReceived);
-        socketRef.current.off("typing", onTyping);
-        socketRef.current.off("stop typing", onStopTyping);
-        socketRef.current.disconnect();
-      }
+    return () => {
+      socketRef.current?.off("typing", onTyping);
+      socketRef.current?.off("stop typing", onStopTyping);
     };
-  }, [user, mapServerMsgToUI, selectedChat]);
+  }, [selectedChat]);
 
   useEffect(() => {
     if (!user?.token) return;

@@ -48,8 +48,21 @@ export const sendMessage = asyncHandler(async (req, res) => {
 
     await Chat.findByIdAndUpdate(chatId, { latestMessage: message });
 
+    // ✅ EMIT MESSAGE VIA SOCKET
     if (io && message.chat && message.chat._id) {
-      io.to(message.chat._id.toString()).emit("message received", message);
+      const roomId = message.chat._id.toString();
+      console.log("🚀 EMITTING MESSAGE:", {
+        event: "message received",
+        roomId,
+        messageId: message._id,
+        senderId: message.sender._id,
+        content: message.content.substring(0, 50),
+        timestamp: new Date().toISOString()
+      });
+      io.to(roomId).emit("message received", message);
+      console.log("✅ MESSAGE EMITTED to room:", roomId);
+    } else {
+      console.warn("⚠️ SKIPPED EMIT: io or chat._id missing", { io: !!io, chat: !!message.chat, chatId: message.chat?._id });
     }
     
     res.json(message);
