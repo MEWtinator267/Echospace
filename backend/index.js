@@ -75,19 +75,6 @@ io.on("connection", (socket) => {
     console.log("User stopped typing in room:", room);
   });
 
-  socket.on("new message", (newMessageReceived) => {
-  const chat = newMessageReceived.chat;
-
-  if (!chat?.users) return console.log("⚠️ Chat.users not defined");
-
-  // Emit the message to ALL users in the chat (including the sender)
-  chat.users.forEach((user) => {
-    io.to(user._id).emit("message received", newMessageReceived);
-  });
-
-  console.log(`💬 Message broadcasted in chat ${chat._id} to ${chat.users.length} users`);
-});
-
   socket.on("disconnect", () => {
     console.log("❌ User disconnected:", socket.id);
   });

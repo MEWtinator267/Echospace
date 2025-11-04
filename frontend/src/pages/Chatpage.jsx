@@ -436,16 +436,37 @@ export default function ChatPage() {
     socketRef.current.on("connect", () => console.log("✅ Socket connected:", socketRef.current.id));
 
     const onMessageReceived = (newMsgReceived) => {
-      if (!newMsgReceived || !newMsgReceived.chat) return;
+      console.log("📨 Message received event:", newMsgReceived);
+      
+      if (!newMsgReceived || !newMsgReceived.chat) {
+        console.warn("⚠️ Invalid message or chat:", newMsgReceived);
+        return;
+      }
+      
+      // Get the current chat ID
+      const currentChatId = selectedChatCompareRef.current?._id;
+      const messageChatId = newMsgReceived.chat?._id || newMsgReceived.chat;
+      
+      console.log("Current chat:", currentChatId, "Message chat:", messageChatId);
       
       // Check if this message is for the currently open chat
-      if (!selectedChatCompareRef.current || selectedChatCompareRef.current._id !== newMsgReceived.chat._id) return;
+      if (!currentChatId || currentChatId.toString() !== messageChatId.toString()) {
+        console.log("Message is not for current chat, ignoring");
+        return;
+      }
+      
+      console.log("✅ Adding message to current chat");
       
       // Add message to state (works for both received and sent messages)
       setMessages((prev) => {
         const messageExists = prev.some((msg) => msg.id === newMsgReceived._id);
-        if (messageExists) return prev;
-        return [...prev, mapServerMsgToUI(newMsgReceived)];
+        if (messageExists) {
+          console.log("Message already exists, skipping");
+          return prev;
+        }
+        const mappedMsg = mapServerMsgToUI(newMsgReceived);
+        console.log("Mapped message:", mappedMsg);
+        return [...prev, mappedMsg];
       });
     };
 
@@ -535,9 +556,8 @@ export default function ChatPage() {
         return replaced;
       });
 
-      if (socketRef.current) {
-        try { socketRef.current.emit("new message", data); } catch (e) { console.warn("Socket emit failed (new message):", e); }
-      }
+      // Don't emit "new message" - the backend already handles this via socket in messageController.js
+      // The message will be received via the "message received" socket event
 
       if (isTextMessage) setNewMessage("");
     } catch (err) {
