@@ -13,13 +13,29 @@ function HeaderLoggedIn() {
 
   const fetchNotifications = async () => {
     try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        console.warn("⚠️ No token found in localStorage");
+        return;
+      }
+
+      console.log("🔔 Fetching notifications...");
       const { data } = await axios.get(`${ENDPOINT}/api/notifications`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
-      setNotifications(data.notifications || []);
+      
+      console.log("📬 Notifications response:", data);
+      
+      if (data.notifications && Array.isArray(data.notifications)) {
+        console.log(`✅ Found ${data.notifications.length} notifications`);
+        setNotifications(data.notifications);
+      } else {
+        console.warn("⚠️ Invalid notifications response format:", data);
+        setNotifications([]);
+      }
     } catch (err) {
-      console.error("Error fetching notifications", err);
-      // Removed alert for better UX
+      console.error("❌ Error fetching notifications:", err.response?.data || err.message);
+      console.error("Full error:", err);
     }
   };
 
@@ -118,10 +134,19 @@ function HeaderLoggedIn() {
                   notifications.map((notif) => (
                     <li
                       key={notif._id}
-                      className="text-sm border p-2 rounded space-y-2"
+                      className="text-sm border p-2 rounded space-y-2 hover:bg-base-200 transition"
                     >
-                      <div>👤 <strong>{notif.senderName}</strong> sent a friend request</div>
-                      <div className="flex gap-2">
+                      <div className="flex items-center gap-2">
+                        <img 
+                          src={notif.senderProfilePic || "https://placehold.co/32x32?text=User"} 
+                          alt={notif.senderName}
+                          className="w-6 h-6 rounded-full"
+                        />
+                        <div className="flex-1">
+                          <strong>{notif.senderName}</strong> sent a friend request
+                        </div>
+                      </div>
+                      <div className="flex gap-2 justify-end">
                         <button
                           className="btn btn-xs btn-primary"
                           onClick={() => acceptFriendRequest(notif._id, notif.senderId)}

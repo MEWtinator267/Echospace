@@ -49,10 +49,17 @@ export const sendFriendRequest = async (req, res) => {
     targetUser.friendRequests.push(trimmedCurrentUserId);
     await targetUser.save();
 
-    await Notification.create({
+    const notification = await Notification.create({
       type: 'friend_request',
       sender: trimmedCurrentUserId,
       receiver: trimmedTargetUserId,
+    });
+    
+    console.log("✅ Notification created:", { 
+      notificationId: notification._id,
+      type: notification.type,
+      sender: trimmedCurrentUserId,
+      receiver: trimmedTargetUserId 
     });
 
     res.status(200).json({ message: "Friend request sent!" });
